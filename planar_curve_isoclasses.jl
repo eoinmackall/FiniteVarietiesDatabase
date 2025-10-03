@@ -11,13 +11,17 @@ using Base.Threads
 ###################################################################
 
 
-if length(ARGS) != 3
-    error("Please provide a prime p, a power n>0, and a degree d.")
+#Should add logic so that this doesn't crash if given integers instead of strings.
+#Should also just make all of the integers BigInts from the start.
+
+if length(ARGS) != 4
+    error("Please provide a prime p, a power r>0, the dimension of ambient projective space n>1, and a degree d>0.")
 end
 
 p = parse(BigInt, ARGS[1])
-n = parse(BigInt, ARGS[2])
-d = parse(BigInt, ARGS[3])
+r = parse(BigInt, ARGS[2])
+n = parse(BigInt, ARGS[3])
+d = parse(BigInt, ARGS[4])
 
 #Add check that p is prime, n>0
 
@@ -39,6 +43,7 @@ function reduce(x::BigInt)
 end
 
 p = reduce(p)
+r = reduce(r)
 n = reduce(n)
 d = reduce(d)
 
@@ -51,10 +56,51 @@ d = reduce(d)
 
 
 
+function _is_colinear(v::Vector{T}, w::Vector{T}) where {T<:FqFieldElem}
+
+    if iszero(v)
+        return true
+    else
+        leading_entry = findfirst(!iszero, v)
+        scalar = w[leading_entry] / v[leading_entry]
+
+        return w == scalar .* v
+    end
+end
+
+"""
+
+"""
+struct GLiterator{T<:FqField}
+    F::T
+    n::Int
+
+    function GLiterator(F::T, n::Int) where {T<:FqField}
+        new{T}(F, n)
+    end
+
+end
+
+GL(n::Int, F::FqField) = GLiterator(F,n)
+
+
+struct PGLiterator{T<:FqField}
+    F::T
+    n::Int
+
+    function PGLiterator(F::T, n::Int) where {T<:FqField}
+        new{T}(F, n)
+    end
+end
+
+PGL(n::Int, F::FqField) = PGLiterator(F,n)
+
 """
 
 """
 function matrix_iterator
+
+
 
 end
 
