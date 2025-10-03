@@ -1,5 +1,15 @@
 using AbstractAlgebra
 using Nemo
+using Graphs
+using Base.Threads
+
+
+###################################################################
+#
+#      Initialization of inputs
+#
+###################################################################
+
 
 if length(ARGS) != 3
     error("Please provide a prime p, a power n>0, and a degree d.")
@@ -32,17 +42,35 @@ p = reduce(p)
 n = reduce(n)
 d = reduce(d)
 
+
+#####################################################################
+#
+#      Constructing iterators for projective transformations
+#
+#####################################################################
+
+
+
 """
-Make an iterator for matrices of GL_3(GF(p^n)) if it doesn't exist already
+
 """
 function matrix_iterator
 
 end
 
+
+
 """
-For each matrix M in the above iterator, compute the symmetric representation of M
+For each matrix M in the above iterator, compute the symmetric representation of M, by acting on a basis.
 """
-function symemtric_iterator
+function symemtric_matrix_iterator
+
+end
+
+"""
+
+"""
+function projective_iterator
 
 end
 
@@ -63,4 +91,10 @@ function plane_curve_isomorphism_classes(p, n, d)
     #
     #Can think about this as being symmetric pairs (v,w) -- there exists an M such that Mv=w then there is an N with Nw=v.
     #So can add symmetric pairs (v,w) to a graph in parallel, then count the number of connected components.
+    #
+    #Okay so here's how this is going to work.
+    #1. Make a list of vertices, each representing one polynomial.
+    #2. Make function that generates from a vertix v the graph Gv
+    #3. In parallel, have multiple threads pick vertices v_1,...,v_n and make Gv_1,...,Gv_n
+    #4. Maintain a list "Classes" that keeps track of Gv_i. Maintain a set hash(vertices(Gv_i)), and only add Gv_j to Classes if hash(vertices(Gv_j)) is not seen yet.
 end
