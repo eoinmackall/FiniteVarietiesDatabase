@@ -76,7 +76,7 @@ struct GL_iterator{T<:FqField}
     dim::Int
 end
 
-GL(dim::Int, F::FqField) = GL_iterator(F,dim)
+GL(dim::Int, F::FqField) = GL_iterator(F, dim)
 
 """
 Iterator for nxn invertible matrix representatives of PGL over a finite field F
@@ -86,47 +86,60 @@ struct PGL_iterator{T<:FqField}
     dim::Int
 end
 
-PGL(dim::Int, F::FqField) = PGL_iterator(F,dim)
+PGL(dim::Int, F::FqField) = PGL_iterator(F, dim)
 
 Base.eltype(::GL_iterator) = FqMatrix
 Base.eltype(::PGL_iterator) = FqMatrix
 
 function order(G::GL_iterator)
 
-    q=length(collect(G.F))
-    n=G.dim
+    q = length(collect(G.F))
+    n = G.dim
 
-    p=1
-    for i in 1:n-1
-       p*=q^n-q^i 
+    p = 1
+    for i in 0:n-1
+        p *= q^n - q^i
     end
     return p
 end
 
 function order(G::PGL_iterator)
 
-    q=length(collect(G.F))
-    n=G.dim
+    q = length(collect(G.F))
+    n = G.dim
 
-    p=1
-    for i in 1:n-1
-	p*=q^n-q^i
+    p = 1
+    for i in 0:n-1
+        p *= q^n - q^i
     end
 
-    p= div(p,q)
+    p = div(p, q)
     return p
 end
 
-Base.length(G::GL_iterator)=order(G)
-Base.length(G::PGL_iterator)=order(G)
+Base.length(G::GL_iterator) = order(G)
+Base.length(G::PGL_iterator) = order(G)
+
+function Base.iterate(G::GL_iterator)
 
 
+
+end
+
+function Base.iterate(G::GL_iterator, state::FqMatrix)
+
+
+
+end
 #Create an iterator for GL_n(F)
 #Create an iterator for PGL_n(F)
 #Make function that takes matrix in GL_n(F) or PGL_n(F) and produces matrix in GL(Sym^m(F)) or PGL(Sym^m(F)) 
 
 #Small question whether threads should access P^n(F) via an iterator, or whether this should be made and stored from the beginning
 
+#Might just rely on the iterators constructed by collect(matrix_space(F,n,n)).
+#Namely, call collect(matrix_space()) and det.collect(matrix_space()) then do findnext(x-> x!=0, det.collect(())) or something and then give matrix and index
+#For the projective iterator, do the same, but skip the matrices where the first column has a non-1 leading term.
 
 
 """
