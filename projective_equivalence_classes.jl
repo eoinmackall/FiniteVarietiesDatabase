@@ -13,7 +13,6 @@ import Base.product
 # Should add logic so that this doesn't crash if given integers instead of strings.
 # Should also just make all of the integers BigInts from the start.
 # Remove redundancy in calculating orbits (only need to check polynomials with leading coeff == 1)
-# Edit Gemini's iterator so that I understand it
 # Make it parallel
 # Maybe make it into a graph also
 
@@ -58,101 +57,126 @@ d = reduce(d)
 #
 #####################################################################
 
-function compositions(n::Integer, d::Integer)
-    IntegerCompositions(n, d)
+#This is faster than monomial_basis on homogeneous rings
+
+function _homogeneous_monomial_exponents(n::Integer, d::Integer)
+    HomogeneousExponents(n, d)
 end
 
-# Internal struct representing the iterator.
-# Users will typically create this via the `compositions` function.
-struct IntegerCompositions
-    n::Int
-    d::Int
+#Struct for generating exponent vectors in reverse lexicographical order
+struct HomogeneousExponents
+    num::Int
+    deg::Int
 
-    function IntegerCompositions(n::Integer, d::Integer)
+    function HomogeneousExponents(n::Integer, d::Integer)
         if n < 0 || d < 0
-            throw(ArgumentError("n and d must be non-negative integers"))
+            throw(ArgumentError("Both n and d must be non-negative integers"))
         end
         new(n, d)
     end
 end
 
-# --- Julia Iterator Interface Implementation ---
-
-# Define the total number of compositions that will be generated.
-function Base.length(it::IntegerCompositions)
-    if it.n == 0
-        return it.d == 0 ? 1 : 0
+function Base.length(exps::HomogeneousExponents)
+    if exps.num == 0
+        return exps.deg == 0 ? 1 : 0
     end
-    # This is the "stars and bars" formula
-    return binomial(it.d + it.n - 1, it.n - 1)
+    return binomial(exps.num + exps.deg - 1, exps.deg)
 end
 
-# Define the type of element that the iterator yields.
-function Base.eltype(::Type{IntegerCompositions})
+function Base.eltype(::Type{HomogeneousExponents})
     return Vector{Int}
 end
 
-# The initial call to the iterator.
-function Base.iterate(it::IntegerCompositions)
+function Base.iterate(exps::HomogeneousExponents)
     # Handle the edge case of n=0.
-    # If n=0 and d=0, the single composition is an empty vector.
-    # If n=0 and d>0, there are no compositions.
-    if it.n == 0
-        return it.d == 0 ? (Int[], nothing) : nothing
+    # If n=0 and d=0, return an empty vector.
+    # If n=0 and d>0, return nothing.
+    if exps.num == 0
+        return exps.deg == 0 ? (Int[0], nothing) : nothing
     end
 
-    # The first composition in lexicographical order is [d, 0, ..., 0].
-    # This vector also serves as the initial state for the next iteration.
-    first_v = zeros(Int, it.n)
-    first_v[1] = it.d
-    return (first_v, first_v)
+    # The first exponent vector will be [d, 0, ..., 0].
+    # This vector serves as the initial state for the next iteration.
+    exps_init = zeros(Int, exps.num)
+    exps_init[1] = exps.deg
+    return (exps_init, exps_init)
 end
 
-# Subsequent calls to the iterator.
-function Base.iterate(it::IntegerCompositions, state::Vector{Int})
-    # The `state` is the vector from the previous iteration.
-    # We will mutate it to produce the next composition.
-    v = state
 
-    # The last composition is [0, 0, ..., d]. If we've reached it, stop.
-    if it.n > 0 && v[end] == it.d
+"""
+Generates vectors of length exps.num with nonnegative integer components
+summing to exps.deg.
+These vectors are generated in lexicographical order ``[d,0,...,0]`` -> ``[d-1,1,...,0]``.
+"""
+function Base.iterate(exps::HomogeneousExponents, state::Vector{Int})
+
+    exps_vec = state
+
+    #Stop if we reach [0,...,0,d]
+    if exps.num > 0 && exps_vec[end] == exps.deg
         return nothing
     end
-    
-    # To find the next lexicographical composition, we scan from right to left.
-    # Find the rightmost element `v[i]` (not in the last position) that can be "moved".
+
+    # To find the next vector, we check from right to left
     i = 0
-    for k in (it.n - 1):-1:1
-        if v[k] > 0
+    for k in (exps.num-1):-1:1
+        if exps_vec[k] > 0
             i = k
             break
         end
     end
 
-    # This condition should not be met due to the `v[end] == it.d` check, but acts as a safeguard.
-    if i == 0
-        return nothing
-    end
+    last = exps_vec[end]
+    exps_vec[end] = 0
 
-    # Collect the sum of all elements to the right of v[i].
-    # These values will be consolidated and moved to position i+1.
-    remainder = 0
-    for k in (i + 1):it.n
-        remainder += v[k]
-        v[k] = 0 # Reset these positions.
-    end
-    
-    # Create the next composition by modifying the vector in place.
-    # 1. Decrement the pivot element.
-    v[i] -= 1
-    # 2. Add the collected remainder (plus the one from the decrement) to the next element.
-    v[i+1] = remainder + 1
-    
-    # Yield the mutated vector and pass it as the state for the next iteration.
-    return (v, v)
+    # Decrement the pivot element.
+    exps_vec[i] -= 1
+    # Add the collected remainder (plus the one from the decrement) to the next element.
+    exps_vec[i+1] = last + 1
+
+    return (exps_vec, exps_vec)
 end
 
+function homogeneous_monomial_basis(S::MPolyRing, d::Int)
 
+    x = gens(S)
+    n = length(x)
+
+    monomial_basis = []
+    for v in HomogeneousExponents(n, d)
+        f = S(0)
+        f = setcoeff!(f, v, 1)
+        push!(monomial_basis, f)
+    end
+    return monomial_basis
+end
+
+###################
+#
+#
+#
+###################
+
+"""
+Takes a nonzero vector with coefficients in the field F.
+Checks if the leading nonzero coefficient is 1.
+"""
+function is_projective_rep(F, v)
+
+    leading_coeff = findfirst(!iszero, v)
+
+    return leading_coeff == F(1)
+
+end
+
+function is_PGL_rep(A)
+    
+    first_column = @view A[:, 1]
+    leading_coeff = findfirst(!iszero, first_column)
+
+    return det(M) !=0 && leading_coeff == 1
+
+end
 
 #####################################################################
 #
@@ -192,38 +216,38 @@ function projective_hypersurface_isomorphism_classes(p, r, n, d)
     #3. In parallel, have multiple threads pick vertices v_1,...,v_n and make Gv_1,...,Gv_n
     #4. Maintain a list "Classes" that keeps track of Gv_i. Maintain a set hash(vertices(Gv_i)), and only add Gv_j to Classes if hash(vertices(Gv_j)) is not seen yet.
 
-    F=GF(p^r)
-    M=matrix_space(F, n+1, n+1)
-    S, x = polynomial_ring(F, ["x$i" for i=0:n])
+    #Set-up
+    F = GF(p^r)
+    M = matrix_space(F, n + 1, n + 1)
+    S, x = polynomial_ring(F, ["x$i" for i = 0:n])
 
-    monomial_basis = []
-    for v in compositions(n+1,d)
-        f=S(0)
-        f=setcoeff!(f, v, 1)
-        push!(monomial_basis, f)
-    end
-    
+    #Create a list of all homogeneous monomials of degree d
+    monomial_basis = homogeneous_monomial_basis(S, d)
+
+    #Create an iterator for all nonzero homogeneous degree d polynomials over F
     coefficient_iterator = product(ntuple(_ -> F, length(monomial_basis))...)
-    homogeneous_polynomials = (sum(c*m for (c,m) in zip(coeffs, monomial_basis)) for coeffs in coefficient_iterator)
+    nonzero_coefficient_iterator = Iterators.drop(coefficient_iterator, 1)
+    homogeneous_polynomials = (sum(c * m for (c, m) in zip(coeffs, monomial_basis))
+                               for coeffs in nonzero_coefficient_iterator
+                               if is_projective_rep(F, coeffs))
+    
+
+    #Create an itertator for representatives of PGL_n
+    PGL = Iterators.filter(A->is_PGL_rep(A), M)
 
     isom_classes = Set()
     for p in homogeneous_polynomials
-        equivalence_class=Set()
-        for A in M
-            if det(A) !=0
-                first_column = @view A[:,1]
-                leading_coeff = findfirst(!iszero, first_column)
-                if leading_coeff == 1
-                    y=A*x
-                    q=p(y...)
-                    push!(equivalence_class, q)
-                end
-            end
+        equivalence_class = Set()
+        for A in PGL
+            y = A * x
+            q = p(y...)
+            push!(equivalence_class, q)
         end
-        push!(isom_classes, equivalence_class)
+    push!(isom_classes, equivalence_class)
     end
+
     print(length(isom_classes))
     return isom_classes
 end
 
-projective_hypersurface_isomorphism_classes(p,r,n,d)
+projective_hypersurface_isomorphism_classes(p, r, n, d)
