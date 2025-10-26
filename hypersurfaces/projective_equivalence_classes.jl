@@ -173,17 +173,18 @@ Inputs: finite field F, integer n>0, integer i>=0.
 Outputs: nxn matrix with coefficients in F gotten by writing
 the i in base-q where q is the size of F.
 """
-function enumerate_matrix(F,n,i)
+function enumerate_matrix(F::FqField, n::Int, i::Int)
 
-    q=order(F)
-    A=Matrix{Int}(undef,n,n)
+    q = order(F)
+    A = Matrix{Int}(undef, n, n)
 
-    quo=i
-    for j=1:n
-        for k=1:n
-            quo,A[j,k]=divrem(quo,q)
+    quo = i
+    for j = 1:n
+        for k = 1:n
+            quo, A[j, k] = divrem(quo, q)
         end
     end
+    A = matrix(F,A)
     return A
 end
 
@@ -191,7 +192,7 @@ end
 Takes a nonzero vector with coefficients in the field F.
 Checks if the leading nonzero coefficient is 1.
 """
-function is_projective_rep(F, v)
+function is_projective_rep(F::FqField, v::Vector{FqFieldElem})
 
     leading_coeff = findfirst(!iszero, v)
 
@@ -204,12 +205,12 @@ Takes a square ``n\times n`` matrix and checks if both the determinant
 is nonzero and the first nonzero entry of the first column, going from
 top to bottom, is equal to 1.
 """
-function is_PGL_rep(A)
-
+function is_PGL_rep(A::FqMatrix)
+    
     first_column = @view A[:, 1]
     leading_coeff = findfirst(!iszero, first_column)
 
-    return det(A) != 0 && first_column[leading_coeff] == 1
+    return det(A) != 0 && first_column[leading_coeff] == base_ring(A)(1)
 
 end
 
@@ -219,6 +220,45 @@ end
 #
 #####################################################################
 
+function _add_to_equiv_class(PGL_list, R::FqMPolyRing, f::FqMPolyRingElem)
+    
+    F=base_ring(R)
+    x = gens(R)
+    partial_equiv_class = Set{FqMPolyRingElem}()
+    for A in PGL_list
+        y = A * x
+        g = f(y...)
+        c = leading_coefficient(term(g, 1))
+        if c != F(1)
+            g = g / c
+        end
+        push!(partial_equiv_class, g)
+    end
+    return partial_equiv_class
+end
+
+function _add_to_equiv_class2(PGL_list, R::FqMPolyRing, f::FqMPolyRingElem, representatives::Set{FqMPolyRingElem}, seen::Atomic{Bool})
+    
+    F=base_ring(R)
+    x = gens(R)
+    for A in PGL_list
+        if seen[]
+            return seen[]
+        end
+        y = A * x
+        g = f(y...)
+        c = leading_coefficient(term(g, 1))
+        if c != F(1)
+            g = g / c
+        end
+        if in(g, representatives)
+            seen[]=true
+            return seen[]
+        end
+    end
+    return seen[]
+end
+
 
 @doc raw"""
 Produces a set of polynomial representatives for projective equivalence
@@ -227,10 +267,72 @@ of p^r elements.
 
 Uses multithreaded union-find method. Can be interrupted for a partial set.
 """
-function projective_hypersurface_equivalence_classes(p, r, n, d)
+function projective_hypersurface_equivalence_classes(p::Int, r::Int, n::Int, d::Int; cached::Bool = false)
+
+    if cached
+        return _projective_hypersurface_equivalence_classes1(p,r,n,d)
+    else
+        return _projective_hypersurface_equivalence_classes2(p,r,n,d)
+    end
+end
+
+function _projective_hypersurface_equivalence_classes1(p::Int, r::Int, n::Int, d::Int)
 
     #Set-up
-    F = GF(p^r)
+    q=p^r
+    F = GF(q)
+    M = matrix_space(F, n + 1, n + 1)
+    R, x = polynomial_ring(F, ["x$i" for i = 0:n])
+    monomial_basis = homogeneous_monomial_basis(R, d)
+
+    
+    println("Beginning memory allocation")
+    #Create an iterator for representatives of nonzero homogeneous degree d polynomials over F
+    homogeneous_polynomials_iterator = (sum(c * m for (c, m) in zip(coeffs, monomial_basis))
+                               for coeffs in ProjectiveCoefficients(F, binomial(n + d, d) - 1))
+    homogeneous_polynomials=Set{FqMPolyRingElem}()
+    sizehint!(homogeneous_polynomials,q^(binomial(n+d,d)-1))
+    union!(homogeneous_polynomials, homogeneous_polynomials_iterator)
+    println("Polynomials built")
+
+    #Create an itertator for representatives of PGL_(n+1)
+    order=prod([q^(n+1)-q^i for i=0:n])/(q-1)
+    PGL_iter = Iterators.filter(A -> is_PGL_rep(A), M)
+    PGL = Vector{FqMatrix}()
+    sizehint!(PGL, order)
+    for A in PGL_iter
+        push!(PGL,A)
+    end
+    PGL_chunks = Iterators.partition(PGL, cld(length(PGL), Threads.nthreads()))
+ 
+    println("Starting collection process")
+    representatives = Set{FqMPolyRingElem}()
+    try
+        while !isempty(homogeneous_polynomials)
+            f=first(homogeneous_polynomials)
+                push!(representatives, f)
+                tasks = map(PGL_chunks) do chunk
+                    Threads.@spawn _add_to_equiv_class(chunk, R, f)
+                end
+                partial_equiv_classes = fetch.(tasks)
+                setdiff!(homogeneous_polynomials, partial_equiv_classes...)
+        end
+    catch err
+        if err isa InterruptException
+            println("Terminating computation early")
+        else
+            rethrow(err)
+        end
+    finally
+        return representatives
+    end
+end
+
+function _projective_hypersurface_equivalence_classes2(p::Int, r::Int, n::Int, d::Int)
+
+    #Set-up
+    q = p^r
+    F = GF(q)
     M = matrix_space(F, n + 1, n + 1)
     R, x = polynomial_ring(F, ["x$i" for i = 0:n])
     monomial_basis = homogeneous_monomial_basis(R, d)
@@ -238,35 +340,30 @@ function projective_hypersurface_equivalence_classes(p, r, n, d)
     #Create an iterator for representatives of nonzero homogeneous degree d polynomials over F
     homogeneous_polynomials = (sum(c * m for (c, m) in zip(coeffs, monomial_basis))
                                for coeffs in ProjectiveCoefficients(F, binomial(n + d, d) - 1))
-
-    #Create an itertator for representatives of PGL_n
+    
+    println("Beginning memory allocation")
+    #Create an itertator for representatives of PGL_(n+1)
+    order=prod([q^(n+1)-q^i for i=0:n])/(q-1)
     PGL_iter = Iterators.filter(A -> is_PGL_rep(A), M)
-    PGL = vec(collect(PGL_iter))
-
-
-    representatives = Set()
-    seen_polynomials = Set()
-    equiv_class_lock = ReentrantLock()
+    PGL = Vector{FqMatrix}()
+    sizehint!(PGL, order)
+    for A in PGL_iter
+        push!(PGL,A)
+    end
+    PGL_chunks = Iterators.partition(PGL, cld(length(PGL), Threads.nthreads()))
+    println("Starting collection process")
+    representatives = Set{FqMPolyRingElem}()
 
     try
         for f in homogeneous_polynomials
-            if in(f, seen_polynomials)
-                continue
-            else
-                push!(representatives, f)
-                equivalence_class = Set()
-                @threads for A in PGL
-                    y = A * x
-                    g = f(y...)
-                    c = leading_coefficient(term(g, 1))
-                    if c != 1
-                        g = g / c
-                    end
-                    lock(equiv_class_lock) do
-                        push!(equivalence_class, g)
-                    end
+            seen = Atomic{Bool}(false)
+            @sync begin
+                for chunk in PGL_chunks
+                    @spawn _add_to_equiv_class2(chunk, R, f, representatives,seen)
                 end
-                union!(seen_polynomials, equivalence_class)
+            end
+            if !seen[]
+                push!(representatives, f)
             end
         end
     catch err
@@ -290,7 +387,7 @@ Input: an nxn-matrix A with n>0 and entries in a field F; an integer d>0.
 Output: the matrix corresponding to the symmetric representation of A of
 degree d.
 """
-function symmetric_representation(A, d)
+function symmetric_representation(A::FqMatrix, d::Int)
 
     F = base_ring(A)
     n = ncols(A) - 1
@@ -315,79 +412,80 @@ function symmetric_representation(A, d)
         push!(L, column)
     end
 
-    R = transpose(hcat(L...))
-    return R
+    T = transpose(hcat(L...))
+    return T
 end
 
-function _count_normals(p,r,n,chunk)
-    
-    F=GF(p^r)
-    M=matrix_space(F,n+1,n+1)
+"""
+Reutrns a dictionary with keys a representative of each conjugacy class
+of GL(n+1,p^r) and with values the size of the corresponding class.
+"""
+function _normal_forms(p::Int, r::Int, n::Int)
 
-    normal_forms = Dict()
-    for i in chunk
-        A=M(enumerate_matrix(F,n+1,i))
-        if det(A) != 0
-            N, _ = rational_canonical_form(A)
-            normal_forms[N] = get(normal_forms,N,0)+1
-        end
-        
-        if i % 10000 == 0
-            GC.gc()
-        end
+    F = GF(p^r)
+
+    G = GAP.Globals.GL(n + 1, p^r)
+    C = GAP.Globals.ConjugacyClasses(G)
+    len = GAP.Globals.Length(C)
+
+    N = Dict{FqMatrix,BigInt}()
+    for i = 1:len
+        a = GAP.Globals.Representative(C[i])
+        num = BigInt(GAP.Globals.Size(C[i]))
+        mat = matrix(F, a)
+        N[mat] = num
     end
-    GC.gc()
-    return normal_forms
+
+    return N
 end
 
-function finite_normal_forms(p, r, n)
-     
-    q=p^r    
+"""
+Computes the contribution to the orbit size coming from an individual
+conjugacy class, by way of Burnside's theorem.
+"""
+function _conjugacy_number(normal_forms::Dict{FqMatrix,BigInt}, q::ZZRingElem, d::Int, n::Int)
 
-    normal_forms = Dict()
-    
-    N=(BigInt(q)^(n+1)^2)
-    enums_ind = 0:(N-1)
-
-    chunks = Iterators.partition(enums_ind, cld(N, Threads.nthreads()))
-    tasks = map(chunks) do chunk
-        Threads.@spawn _count_normals(p,r,n,chunk)
-    end
-    chunk_dicts = fetch.(tasks)
-    
-    return merge(+,chunk_dicts)
-end
-
-function _conjugacy_number(list_of_matrices, q, d, n)
-    
     F = base_ring(first(keys(normal_forms)))
     binom = binomial(n + d, d)
     M = matrix_space(F, binom, binom)
-    I = identity_matrix(M) 
- 
-    j=0 
-    for A in list_of_matrices
+    I = identity_matrix(F, binom)
+
+    j = 0
+    for A in keys(normal_forms)
         RA = symmetric_representation(A, d)
         eigen = M(RA) - I
         mult = binomial(n + d, d) - rank(eigen)
         j += normal_forms[A] * q^mult
     end
-    
+    return j
 end
 
-function number_of_GL_orbits(normal_forms, d)
+
+@doc raw"""
+Inputs: a dictionary with keys a reprsentative of a given conjugacy class,
+and with values the size of the conjugacy class, from GL(n+1,p^r), and an
+integer d>0.
+
+Outputs: the number of nonzero orbits of GL(n+1,p^r) on the dth symmetric
+power of the canonical n+1 vector space that GL(n+1,p^r) acts on.
+
+If every element of GF(p^r) is a dth power, e.g. if gcd(p^r-1,d)=1, then
+this is the number of projective equivalence classes of hypersurfaces of
+degree d in ``\mathbb{P}^n`` over GF(p^r).
+"""
+function orbit_size(normal_forms::Dict{FqMatrix,BigInt}, d::Int)
 
     F = base_ring(first(keys(normal_forms)))
     q = order(F)
     n = ncols(first(keys(normal_forms))) - 1
-    
-    keys_n = collect(keys(normal_forms))
-    chunks = Iterators.partition(keys_n, cld(length(keys_n), Threads.nthreads()))
+
+    chunks = Iterators.partition(normal_forms, cld(length(normal_forms), Threads.nthreads()))
     tasks = map(chunks) do chunk
-        Threads.@spawn _conjugacy_number(chunk, q, d, n)
+        chunk_dict = Dict(chunk)
+        Threads.@spawn _conjugacy_number(chunk_dict, q, d, n)
     end
     chunk_sums = fetch.(tasks)
-    j=sum(chunk_sums)
+    j = sum(chunk_sums)
 
     ord = 1
     for i = 0:n
