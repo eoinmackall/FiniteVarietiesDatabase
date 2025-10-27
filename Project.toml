@@ -1,0 +1,5 @@
+name = "FiniteVarietiesDB"
+uuid = "30c72606-59d1-47a9-b9ee-5125b74b420d"
+
+[deps]
+Oscar = "f1435218-dba5-11e9-1e4d-f1a5fab5fc13"
