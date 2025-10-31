@@ -166,7 +166,7 @@ end
 """
 Inputs: finite field F, integer n>0, integer i>=0.
 Outputs: nxn matrix with coefficients in F gotten by writing
-the i in base-q where q is the size of F.
+the integer i in base-q where q is the size of F.
 """
 function enumerate_matrix(F::FqField, n::Int, i::Int)
 
@@ -294,11 +294,11 @@ function _projective_hypersurface_equivalence_classes1(p::Int, r::Int, n::Int, d
     order = prod([q^(n + 1) - q^i for i = 0:n]) / (q - 1)
     PGL_iter = Iterators.filter(A -> is_PGL_rep(A), M)
     PGL = Vector{FqMatrix}()
-    sizehint!(PGL, order)
+    sizehint!(PGL, Int(order))
     for A in PGL_iter
         push!(PGL, A)
     end
-    PGL_chunks = Iterators.partition(PGL, cld(length(PGL), Threads.nthreads()))
+    PGL_chunks = Iterators.partition(PGL, cld(Int(order), Threads.nthreads()))
 
     println("Starting collection process")
     representatives = Set{FqMPolyRingElem}()
@@ -341,11 +341,11 @@ function _projective_hypersurface_equivalence_classes2(p::Int, r::Int, n::Int, d
     order = prod([q^(n + 1) - q^i for i = 0:n]) / (q - 1)
     PGL_iter = Iterators.filter(A -> is_PGL_rep(A), M)
     PGL = Vector{FqMatrix}()
-    sizehint!(PGL, order)
+    sizehint!(PGL, Int(order))
     for A in PGL_iter
         push!(PGL, A)
     end
-    PGL_chunks = Iterators.partition(PGL, cld(length(PGL), Threads.nthreads()))
+    PGL_chunks = Iterators.partition(PGL, cld(Int(order), Threads.nthreads()))
     println("Starting collection process")
     representatives = Set{FqMPolyRingElem}()
 
