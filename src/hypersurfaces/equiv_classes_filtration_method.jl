@@ -67,7 +67,7 @@ end
 function polynomial_sampler(components, num_samples)
     
     len = length(components)
-    num_component_samples=ceil(Int,(num_samples)^(1/len))
+    num_component_samples=ceil(Int,(1+log(len))*(num_samples)^(1/len))
         rand_R_polys = []
         for V in components
             component_samples=[]
@@ -76,15 +76,20 @@ function polynomial_sampler(components, num_samples)
             end
             push!(rand_R_polys, component_samples)
         end
-
+    return rand_R_polys
 
 end
 
-function is_GL_invariant(V)
+function is_GL_invariant(F, a, n, R, W, inc, inv_inc)
+   
+    q=order(F)
+    if q==2
+
     
+
 end
 
-function _chain_constructor(F, n, d; waring_samples=48, basis_samples = 100)
+function _chain_constructor(F, a, n, d; waring_samples=48, basis_samples = 100)
     
     q = order(F)
     R, _ = graded_polynomial_ring(F, ["x$i" for i = 0:n])
