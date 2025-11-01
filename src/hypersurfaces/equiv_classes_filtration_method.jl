@@ -80,21 +80,65 @@ function polynomial_sampler(components, num_samples)
 
 end
 
-function is_GL_invariant(F, a, n, R, W, inc, inv_inc)
-   
+function random_polynomial(components)
+
+    return [V[2](rand(V[1])) for V in components]
+
+end
+
+function GL_generators(F,a,n)
+
     q=order(F)
     if q==2
+        X=identity_matrix(F,n+1)
+        X[1,2]=1
 
+        Y=zero_matrix(F,n+1,n+1)
+        for i=1:n
+            Y[i+1,i]=1
+        end
+        Y[1,n+1]=1
+    else
+        X=identity_matrix(F,n+1)
+        X[1,1]=a
+        
+        Y=zero_matrix(F,n+1,n+1)
+        for i=1:n
+            Y[i+1,i]=-1
+        end
+        Y[1,1]=-1
+       Y[1,n+1]=1
+    end
+    return X,Y
+end
+
+function is_GL_invariant(X, Y, x, V, W, sub_map, inc, inv_inc)
     
+    W_basis = gens(W)
+    for vec_f in W_basis
+        f=inc(sub_map(vec_f))
+        y= X*x
+        g=f(y...)
+        z=Y*x
+        h=f(z...)
 
+        bool1, _ = haspreimage(sub_map, inv_inc(g))
+        bool2, _ = haspreimage(sub_map, inv_inc(h))
+        if (!bool1 || !bool2)
+            return false
+        end
+    end
+    return true
 end
 
 function _chain_constructor(F, a, n, d; waring_samples=48, basis_samples = 100)
     
     q = order(F)
-    R, _ = graded_polynomial_ring(F, ["x$i" for i = 0:n])
+    R, x = graded_polynomial_ring(F, ["x$i" for i = 0:n])
     Rd, inc = homogeneous_component(R, d)
     inv_inc = inv(inc)
+
+    X,Y = GL_generators(F,a,n)
 
     ALL = Set()
     seen_weights = []
@@ -145,7 +189,13 @@ function _chain_constructor(F, a, n, d; waring_samples=48, basis_samples = 100)
                                 push!(gens, inv_inc(evaluate(g, [f...])))
                             end
                             
-                            W, _ = sub(Rd, gens)
+                            W, sub_map = sub(Rd, gens)
+                            
+                            while !is_GL_invariant(X,Y, x, Rd, W, sub_map, inc, inv_inc)
+                                f=random_polynomial(components)
+                                push!(gens,inv_inc(evaluate(g,f)))
+                                W, sub_map = sub(Rd, gens)
+                            end
                             push!(partial, dim(W))
                         end
                         return partial
