@@ -7,6 +7,8 @@
 
 
 """
+symmetric_representation(A::FqMatrix, d::Int)
+
 Input: an nxn-matrix A with n>0 and entries in a field F; an integer d>0.
 Output: the matrix corresponding to the symmetric representation of A of
 degree d.
@@ -41,6 +43,8 @@ function symmetric_representation(A::FqMatrix, d::Int)
 end
 
 """
+normal_forms(p::Int, r::Int, n::Int)
+
 Reutrns a dictionary with keys a representative of each conjugacy class
 of GL(n+1,p^r) and with values the size of the corresponding class.
 """
@@ -86,6 +90,8 @@ end
 
 
 @doc raw"""
+orbit_size(normal_forms::Dict{FqMatrix,BigInt}, d::Int})
+
 Inputs: a dictionary with keys a reprsentative of a given conjugacy class,
 and with values the size of the conjugacy class, from GL(n+1,p^r), and an
 integer d>0.

@@ -24,12 +24,12 @@
 
 mutable struct DChainNode{T}
 
-    node::T
-    subobjects::Vector{DChainNode{T}}
+    object::T
+    subobjects::Set{DChainNode}
 
     function DChainNode(node::T) where {T}
 
-        new{T}(node, Vector{DChainNode{T}}())
+        new{T}(node, Set{DChainNode{T}}())
     end
 end
 
@@ -38,9 +38,51 @@ function add_subnode!(supernode::DChainNode, subnode::DChainNode)
     push!(supernode.subobjects, subnode)
 end
 
-function descending_subspaces()
+function delete_subnode!(supernode::DChainNode, subnode::DChainNode)
 
+    delete!(supernode.subobjects, subnode)
+end
 
+function ==(a::DChainNode, b::DChainNode)
+    return a.object == b.object
+end
+
+function add_subspace_descending(head::Union{DChainNode{AbstractAlgebra.Generic.FreeModule{FqFieldElem}},DChainNode{AbstractAlgebra.Generic.Submodule{FqFieldElem}}},
+    new_node::DChainNode{AbstractAlgebra.Generic.Submodule{FqFieldElem}})
+
+    
+    was_added_deeper = false
+    
+    new_node_contains = Set{DChainNode{AbstractAlgebra.Generic.Submodule{FqFieldElem}}}()
+
+    for node in head.subobjects
+
+        Intersection = intersect(new_node.object, node.object)
+
+        if Intersection == new_node.object
+
+            if new_node.object == node.object
+                return head
+            end
+            add_subspace_descending(node, new_node)
+            was_added_deeper=true
+
+        elseif Intersection == node.object
+            push!(new_node_contains, node)
+        end
+    end
+    
+    if !isempty(new_node_contains)
+        for node in new_node_contains
+
+            delete_subnode!(head, node)
+            add_subnode!(new_node, node)
+        end            
+        add_subnode!(head, new_node)
+    elseif !was_added_deeper
+        add_subnode!(head, new_node)
+    end    
+    return head
 end
 
 ############################################################
@@ -49,78 +91,63 @@ end
 #
 ############################################################
 
-function all_elements(V)
+function _polynomial_sampler(components, num_samples)
 
-    F = base_ring(V)
-
-    return (sum(c[i] * V[i] for i = 1:dim(V)) for c in Iterators.product([collect(F) for j = 1:dim(V)]...))
-
-end
-
-function all_polys(V, phi) # Can make an all_proj_poly_reps(V, phi) function and filter g over this.
-
-    F = base_ring(V)
-
-    return (phi(sum(c[i] * V[i] for i = 1:dim(V))) for c in Iterators.product([collect(F) for j = 1:dim(V)]...))
-end
-
-function polynomial_sampler(components, num_samples)
-    
     len = length(components)
-    num_component_samples=ceil(Int,(1+log(len))*(num_samples)^(1/len))
-        rand_R_polys = []
-        for V in components
-            component_samples=[]
-            for _ in 1:num_component_samples
-                push!(component_samples, V[2](rand(V[1])))
-            end
-            push!(rand_R_polys, component_samples)
+    num_component_samples = ceil(Int, (1 + log(len)) * (num_samples)^(1 / len))
+    rand_R_polys = []
+    for V in components
+        component_samples = []
+        for _ in 1:num_component_samples
+            push!(component_samples, V[2](rand(V[1])))
         end
+        push!(rand_R_polys, component_samples)
+    end
     return rand_R_polys
 
 end
 
-function random_polynomial(components)
+function _random_polynomial(components)
 
     return [V[2](rand(V[1])) for V in components]
 
 end
 
-function GL_generators(F,a,n)
+function GL_generators(F, a, n)
 
-    q=order(F)
-    if q==2
-        X=identity_matrix(F,n+1)
-        X[1,2]=1
+    q = order(F)
+    if q == 2
+        X = identity_matrix(F, n + 1)
+        X[1, 2] = 1
 
-        Y=zero_matrix(F,n+1,n+1)
-        for i=1:n
-            Y[i+1,i]=1
+        Y = zero_matrix(F, n + 1, n + 1)
+        for i = 1:n
+            Y[i+1, i] = 1
         end
-        Y[1,n+1]=1
+        Y[1, n+1] = 1
     else
-        X=identity_matrix(F,n+1)
-        X[1,1]=a
-        
-        Y=zero_matrix(F,n+1,n+1)
-        for i=1:n
-            Y[i+1,i]=-1
+        X = identity_matrix(F, n + 1)
+        X[1, 1] = a
+
+        Y = zero_matrix(F, n + 1, n + 1)
+        for i = 1:n
+            Y[i+1, i] = -1
         end
-        Y[1,1]=-1
-       Y[1,n+1]=1
+        Y[1, 1] = -1
+        Y[1, n+1] = 1
     end
-    return X,Y
+    return X, Y
 end
 
-function is_GL_invariant(X, Y, x, V, W, sub_map, inc, inv_inc)
-    
+function _is_GL_invariant(X, Y, x, V, W, sub_map, inc, inv_inc)
+
     W_basis = gens(W)
     for vec_f in W_basis
-        f=inc(sub_map(vec_f))
-        y= X*x
-        g=f(y...)
-        z=Y*x
-        h=f(z...)
+        f = inc(sub_map(vec_f))
+        y = X * x
+        g = f(y...)
+        z = Y * x
+        h = f(z...)
 
         bool1, _ = haspreimage(sub_map, inv_inc(g))
         bool2, _ = haspreimage(sub_map, inv_inc(h))
@@ -131,14 +158,16 @@ function is_GL_invariant(X, Y, x, V, W, sub_map, inc, inv_inc)
     return true
 end
 
-function _chain_constructor(F, a, n, d; waring_samples=48, basis_samples = 100)
-    
+function _chain_constructor(F, a, n, d; waring_samples=48, basis_samples=100)
+
     q = order(F)
     R, x = graded_polynomial_ring(F, ["x$i" for i = 0:n])
     Rd, inc = homogeneous_component(R, d)
     inv_inc = inv(inc)
 
-    X,Y = GL_generators(F,a,n)
+    head = DChainNode(Rd)
+
+    X, Y = GL_generators(F, a, n)
 
     ALL = Set()
     seen_weights = []
@@ -150,7 +179,7 @@ function _chain_constructor(F, a, n, d; waring_samples=48, basis_samples = 100)
         end
         divisors_iterator = Iterators.product(divisors_list...)
         for divs in divisors_iterator
-            
+
             if length(P) == 1
                 if divs == (d,)
                     continue
@@ -167,11 +196,11 @@ function _chain_constructor(F, a, n, d; waring_samples=48, basis_samples = 100)
                     R_j, i_j = homogeneous_component(R, j)
                     push!(components, (R_j, i_j))
                 end
-                
-                max_basis_samples = min(2*dim(Rd), basis_samples)
-                rand_R_polys = polynomial_sampler(components, max_basis_samples) 
-                
-                Waring_iterator=Iterators.product(rand_R_polys...)
+
+                max_basis_samples = min(2 * dim(Rd), basis_samples)
+                rand_R_polys = _polynomial_sampler(components, max_basis_samples)
+
+                Waring_iterator = Iterators.product(rand_R_polys...)
 
 
                 max_samples = min(Int(q^dim(L)), waring_samples)
@@ -182,31 +211,35 @@ function _chain_constructor(F, a, n, d; waring_samples=48, basis_samples = 100)
                     Threads.@spawn begin
                         partial = Set()
                         for _ in chunk
-                            g=phi(rand(L))
+                            g = phi(rand(L))
                             gens = Vector{AbstractAlgebra.Generic.FreeModuleElem{FqFieldElem}}()
-                                                        
+
                             for f in Waring_iterator
                                 push!(gens, inv_inc(evaluate(g, [f...])))
                             end
-                            
+
                             W, sub_map = sub(Rd, gens)
-                            
-                            while !is_GL_invariant(X,Y, x, Rd, W, sub_map, inc, inv_inc)
-                                f=random_polynomial(components)
-                                push!(gens,inv_inc(evaluate(g,f)))
+
+                            while !(_is_GL_invariant(X, Y, x, Rd, W, sub_map, inc, inv_inc))
+                                f = _random_polynomial(components)
+                                push!(gens, inv_inc(evaluate(g, f)))
                                 W, sub_map = sub(Rd, gens)
                             end
-                            push!(partial, dim(W))
+                            W_node = DChainNode(W)
+                            push!(partial,W_node)
                         end
                         return partial
                     end
                 end
-                partial_dims = fetch.(tasks)
-                union!(ALL, partial_dims...)
+                partial_spaces = fetch.(tasks)
+                union!(ALL, partial_spaces...)
+                for node in ALL
+                    add_subspace_descending(head,node)
+                end
             end
             push!(seen_weights, divs)
         end
 
     end
-    return ALL
+    return head
 end

@@ -164,6 +164,8 @@ function Base.iterate(coeffs::ProjectiveCoefficients, state)
 end
 
 """
+enumerate_matrix(F::FqField, n::Int, i::Int)
+
 Inputs: finite field F, integer n>0, integer i>=0.
 Outputs: nxn matrix with coefficients in F gotten by writing
 the integer i in base-q where q is the size of F.
@@ -184,6 +186,8 @@ function enumerate_matrix(F::FqField, n::Int, i::Int)
 end
 
 """
+is_projective_rep(F::FqField, v::Vector{FqFieldElem})
+
 Takes a nonzero vector with coefficients in the field F.
 Checks if the leading nonzero coefficient is 1.
 """
@@ -196,6 +200,8 @@ function is_projective_rep(F::FqField, v::Vector{FqFieldElem})
 end
 
 @doc raw"""
+is_PGL_rep(A::FqMatrix)
+
 Takes a square ``n\times n`` matrix and checks if both the determinant
 is nonzero and the first nonzero entry of the first column, going from
 top to bottom, is equal to 1.
@@ -256,11 +262,17 @@ end
 
 
 @doc raw"""
+projective_hypersurface_equivalence_classes(p::Int, r::Int, n::Int, d::Int; cached::Bool=false)
+
 Produces a set of polynomial representatives for projective equivalence
 classes of hypersurfaces of degree d in ``\mathbb{P}^n`` over a finite field
 of p^r elements.
 
 Uses multithreaded union-find method. Can be interrupted for a partial set.
+
+Setting cached=true will preallocate a vector of representatives for ``\mathbb{P}(V)``
+where ``V`` is the vector space of homogeneous polynomials of degree d in n+1 variables.
+This is a faster method, but can easily cause the system to run out of memory.
 """
 function projective_hypersurface_equivalence_classes(p::Int, r::Int, n::Int, d::Int; cached::Bool=false)
 

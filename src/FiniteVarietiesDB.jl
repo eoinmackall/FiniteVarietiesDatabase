@@ -2,10 +2,14 @@ module FiniteVarietiesDB
 
 using Oscar
 using Base.Threads
+import Base: ==
 
 include("./hypersurfaces/equiv_classes_filtration_method.jl")
 include("./hypersurfaces/orbit_size.jl")
 include("./hypersurfaces/projective_equivalence_classes.jl")
+
+
+export DChainNode, add_subnode!, delete_subnode!, add_subspace_descending
 
 export homogeneous_monomial_basis
 export HomogeneousExponents
