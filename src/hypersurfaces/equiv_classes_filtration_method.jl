@@ -29,7 +29,7 @@ mutable struct DChainNode{T}
 
     function DChainNode(node::T) where {T}
 
-        new{T}(node, Set{DChainNode{T}}())
+        new{T}(node, Set{DChainNode}())
     end
 end
 
@@ -43,46 +43,86 @@ function delete_subnode!(supernode::DChainNode, subnode::DChainNode)
     delete!(supernode.subobjects, subnode)
 end
 
-function ==(a::DChainNode, b::DChainNode)
-    return a.object == b.object
+==(a::DChainNode, b::DChainNode) = (a.object == b.object)
+
+hash(node:: DChainNode, h::UInt) = hash(node.object, h)
+
+function is_in(head::DChainNode, node::DChainNode)
+    
+    return (head==node) || any(x->is_in(x,node), head.subobjects)
 end
 
-function add_subspace_descending(head::Union{DChainNode{AbstractAlgebra.Generic.FreeModule{FqFieldElem}},DChainNode{AbstractAlgebra.Generic.Submodule{FqFieldElem}}},
+function _prune_and_collect_subspaces(
+    head::Union{DChainNode{AbstractAlgebra.Generic.FreeModule{FqFieldElem}},DChainNode{AbstractAlgebra.Generic.Submodule{FqFieldElem}}},
+    node::DChainNode{AbstractAlgebra.Generic.Submodule{FqFieldElem}})
+
+    node_contains = Set{DChainNode{AbstractAlgebra.Generic.Submodule{FqFieldElem}}}()
+    _prune_and_collect_subspaces!(node_contains, head, node)
+    return node_contains
+end
+
+function _prune_and_collect_subspaces!(result::Set{DChainNode{AbstractAlgebra.Generic.Submodule{FqFieldElem}}}, 
+    head::Union{DChainNode{AbstractAlgebra.Generic.FreeModule{FqFieldElem}},DChainNode{AbstractAlgebra.Generic.Submodule{FqFieldElem}}},
     new_node::DChainNode{AbstractAlgebra.Generic.Submodule{FqFieldElem}})
 
-    
-    was_added_deeper = false
-    
-    new_node_contains = Set{DChainNode{AbstractAlgebra.Generic.Submodule{FqFieldElem}}}()
-
+    temp = Set()
     for node in head.subobjects
 
         Intersection = intersect(new_node.object, node.object)
 
+        if Intersection == node.object
+            push!(result, node)
+            push!(temp, node)
+        else
+            _prune_and_collect_subspaces!(result, node, new_node)
+        end
+    end
+    for subnode in temp
+        delete_subnode!(head, subnode)
+    end
+end
+ 
+function add_subspace_descending!(
+    head::Union{DChainNode{AbstractAlgebra.Generic.FreeModule{FqFieldElem}},DChainNode{AbstractAlgebra.Generic.Submodule{FqFieldElem}}},
+    new_node::DChainNode{AbstractAlgebra.Generic.Submodule{FqFieldElem}})
+
+    if is_in(head, new_node)
+        return
+    end
+
+    new_node_contains = _prune_and_collect_subspaces(head, new_node)
+    for node in new_node_contains
+        add_subnode!(new_node, node)
+    end
+
+    added_later = false
+    for node in head.subobjects
+        Intersection = intersect(new_node.object, node.object)
         if Intersection == new_node.object
-
-            if new_node.object == node.object
-                return head
-            end
-            add_subspace_descending(node, new_node)
-            was_added_deeper=true
-
-        elseif Intersection == node.object
-            push!(new_node_contains, node)
+            add_subspace_descending!(node, new_node)
+            added_later = true
         end
     end
     
-    if !isempty(new_node_contains)
-        for node in new_node_contains
+    if !added_later
+        add_subnode!(head, new_node)
+    end
+    return
+end
 
-            delete_subnode!(head, node)
-            add_subnode!(new_node, node)
-        end            
-        add_subnode!(head, new_node)
-    elseif !was_added_deeper
-        add_subnode!(head, new_node)
-    end    
-    return head
+function _print_chain_dimensions(head::DChainNode)
+    
+    println(dim(head.object))
+    for node in head.subobjects
+        _print_chain_dimensions(node)
+    end
+    return
+end
+
+function _chain_finder(head::DChainNode)
+
+    
+
 end
 
 ############################################################
@@ -158,7 +198,7 @@ function _is_GL_invariant(X, Y, x, V, W, sub_map, inc, inv_inc)
     return true
 end
 
-function _chain_constructor(F, a, n, d; waring_samples=48, basis_samples=100)
+function _chain_constructor(F, a, n, d; waring_samples=48, basis_samples=100, verbose = false)
 
     q = order(F)
     R, x = graded_polynomial_ring(F, ["x$i" for i = 0:n])
@@ -203,7 +243,7 @@ function _chain_constructor(F, a, n, d; waring_samples=48, basis_samples=100)
                 Waring_iterator = Iterators.product(rand_R_polys...)
 
 
-                max_samples = min(Int(q^dim(L)), waring_samples)
+                max_samples = Int(min(BigInt(q^dim(L)), waring_samples))
                 sample_range = collect(1:max_samples)
                 sample_range_chunks = Iterators.partition(sample_range, cld(max_samples, Threads.nthreads()))
 
@@ -234,12 +274,14 @@ function _chain_constructor(F, a, n, d; waring_samples=48, basis_samples=100)
                 partial_spaces = fetch.(tasks)
                 union!(ALL, partial_spaces...)
                 for node in ALL
-                    add_subspace_descending(head,node)
+                    add_subspace_descending!(head,node)
                 end
             end
             push!(seen_weights, divs)
         end
-
+    end
+    if verbose == true
+        _print_chain_dimensions(head)
     end
     return head
 end
