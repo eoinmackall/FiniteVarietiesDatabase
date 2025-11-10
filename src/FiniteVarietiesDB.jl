@@ -2,7 +2,7 @@ module FiniteVarietiesDB
 
 using Oscar
 using Base.Threads
-import Base: ==
+import Base: ==, hash
 
 include("./hypersurfaces/equiv_classes_filtration_method.jl")
 include("./hypersurfaces/orbit_size.jl")

@@ -43,13 +43,13 @@ function delete_subnode!(supernode::DChainNode, subnode::DChainNode)
     delete!(supernode.subobjects, subnode)
 end
 
-==(a::DChainNode, b::DChainNode) = (a.object == b.object)
+Base.:(==)(a::DChainNode{T}, b::DChainNode{S}) where {T,S} = (a.object == b.object)
 
-hash(node:: DChainNode, h::UInt) = hash(node.object, h)
+Base.hash(node::DChainNode{T}, h::UInt) where {T} = hash(node.object, h)
 
 function is_in(head::DChainNode, node::DChainNode)
-    
-    return (head==node) || any(x->is_in(x,node), head.subobjects)
+
+    return (head == node) || any(x -> is_in(x, node), head.subobjects)
 end
 
 function _prune_and_collect_subspaces(
@@ -61,14 +61,14 @@ function _prune_and_collect_subspaces(
     return node_contains
 end
 
-function _prune_and_collect_subspaces!(result::Set{DChainNode{AbstractAlgebra.Generic.Submodule{FqFieldElem}}}, 
+function _prune_and_collect_subspaces!(result::Set{DChainNode{AbstractAlgebra.Generic.Submodule{FqFieldElem}}},
     head::Union{DChainNode{AbstractAlgebra.Generic.FreeModule{FqFieldElem}},DChainNode{AbstractAlgebra.Generic.Submodule{FqFieldElem}}},
     new_node::DChainNode{AbstractAlgebra.Generic.Submodule{FqFieldElem}})
 
     temp = Set()
     for node in head.subobjects
 
-        Intersection = intersect(new_node.object, node.object)
+        Intersection, _ = intersect(new_node.object, node.object)
 
         if Intersection == node.object
             push!(result, node)
@@ -81,7 +81,7 @@ function _prune_and_collect_subspaces!(result::Set{DChainNode{AbstractAlgebra.Ge
         delete_subnode!(head, subnode)
     end
 end
- 
+
 function add_subspace_descending!(
     head::Union{DChainNode{AbstractAlgebra.Generic.FreeModule{FqFieldElem}},DChainNode{AbstractAlgebra.Generic.Submodule{FqFieldElem}}},
     new_node::DChainNode{AbstractAlgebra.Generic.Submodule{FqFieldElem}})
@@ -95,34 +95,92 @@ function add_subspace_descending!(
         add_subnode!(new_node, node)
     end
 
-    added_later = false
     for node in head.subobjects
-        Intersection = intersect(new_node.object, node.object)
+        Intersection, _ = intersect(new_node.object, node.object)
         if Intersection == new_node.object
             add_subspace_descending!(node, new_node)
-            added_later = true
         end
     end
-    
-    if !added_later
-        add_subnode!(head, new_node)
-    end
+
+    add_subnode!(head, new_node)
     return
 end
 
-function _print_chain_dimensions(head::DChainNode)
-    
-    println(dim(head.object))
-    for node in head.subobjects
-        _print_chain_dimensions(node)
+function complete_poset(head::DChainNode, nodes::Set{DChainNode})
+
+    for node1 in nodes
+        for node2 in nodes
+            if node1==node2
+                continue
+            end
+            has_intermediate_term = false
+            intersection, _ = intersect(node1.object, node2.object)
+
+            if intersection == node2.object
+                for node3 in nodes
+                    if (node3 == node1 || node3 == node2)
+                        continue
+                    end
+                    intersection1, _ = intersect(node1.object, node3.object)
+                    intersection2, _ = intersect(node2.object, node3.object)
+                    if (intersection1 == node3.object && intersection2 == node2.object)
+                        has_intermediate_term = true
+                        break
+                    end
+                end
+                if has_intermediate_term == true
+                    continue
+                else
+                    add_subnode!(node1, node2)
+                end
+            end
+        end
     end
-    return
+    return head
 end
 
 function _chain_finder(head::DChainNode)
 
-    
+    chains = collect_chains(head)
 
+    d = dim(head.object)
+    good_chain = chains[1]
+    for chain in chains
+        temp_d = 0
+        for i = 1:(length(chain)-1)
+            temp_d += dim(chain[i].object) - dim(chain[i+1])
+        end
+        if dim(chain[end].object) != 0
+            temp_d += dim(chain[end].object)
+        end
+        if temp_d < d
+            d = temp_d
+            good_chain = chain
+        end
+    end
+    return (d, good_chain)
+end
+
+function collect_chains(head::DChainNode)
+
+    all_chains = Vector{Vector{DChainNode}}()
+
+    function _chain_builder(node::DChainNode, chain::Vector{DChainNode})
+
+        if isempty(node.subobjects)
+            push!(all_chains, chain)
+        else
+            for subnode in node.subobjects
+                chain_path = [chain..., subnode]
+                _chain_builder(subnode, chain_path)
+            end
+        end
+    end
+
+    list = Vector{DChainNode}()
+    push!(list, head)
+    _chain_builder(head, list)
+    return all_chains
 end
 
 ############################################################
@@ -179,7 +237,7 @@ function GL_generators(F, a, n)
     return X, Y
 end
 
-function _is_GL_invariant(X, Y, x, V, W, sub_map, inc, inv_inc)
+function _is_GL_invariant(X, Y, x, W, sub_map, inc, inv_inc)
 
     W_basis = gens(W)
     for vec_f in W_basis
@@ -198,7 +256,7 @@ function _is_GL_invariant(X, Y, x, V, W, sub_map, inc, inv_inc)
     return true
 end
 
-function _chain_constructor(F, a, n, d; waring_samples=48, basis_samples=100, verbose = false)
+function _chain_constructor(F, a, n, d; waring_samples=48, basis_samples=100, verbose=false, complete=false)
 
     q = order(F)
     R, x = graded_polynomial_ring(F, ["x$i" for i = 0:n])
@@ -209,7 +267,7 @@ function _chain_constructor(F, a, n, d; waring_samples=48, basis_samples=100, ve
 
     X, Y = GL_generators(F, a, n)
 
-    ALL = Set()
+    ALL = Set{DChainNode}()
     seen_weights = []
     for P in partitions(d)
         len_p = length(P)
@@ -260,28 +318,41 @@ function _chain_constructor(F, a, n, d; waring_samples=48, basis_samples=100, ve
 
                             W, sub_map = sub(Rd, gens)
 
-                            while !(_is_GL_invariant(X, Y, x, Rd, W, sub_map, inc, inv_inc))
+                            while !(_is_GL_invariant(X, Y, x, W, sub_map, inc, inv_inc))
                                 f = _random_polynomial(components)
                                 push!(gens, inv_inc(evaluate(g, f)))
                                 W, sub_map = sub(Rd, gens)
                             end
                             W_node = DChainNode(W)
-                            push!(partial,W_node)
+                            push!(partial, W_node)
                         end
                         return partial
                     end
                 end
                 partial_spaces = fetch.(tasks)
                 union!(ALL, partial_spaces...)
-                for node in ALL
-                    add_subspace_descending!(head,node)
-                end
             end
             push!(seen_weights, divs)
         end
     end
+    if complete == false
+        for node in ALL
+            add_subspace_descending!(head, node)
+        end
+    else
+        push!(ALL, head)
+        complete_poset(head, ALL)
+    end
+
     if verbose == true
-        _print_chain_dimensions(head)
+        chains = collect_chains(head)
+        println("Found the following chains:")
+        for chain in chains
+            for i = 1:length(chain)
+                print(dim(chain[i].object), " ")
+            end
+            println()
+        end
     end
     return head
 end
