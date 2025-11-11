@@ -4,6 +4,8 @@
 #
 #####################################################################
 
+#TODO: make an introduction in here.
+
 #TODO: Want to create a G-invariant filtration of subspaces in Sym^d(V), V=k{x_0,...,x_n}
 # 1. Need a way to create G-invariant subspaces. Maybe this is done already?
 # You can create these from weighted partitions. Should exclude trivial cases.
@@ -51,6 +53,35 @@ function is_in(head::DChainNode, node::DChainNode)
 
     return (head == node) || any(x -> is_in(x, node), head.subobjects)
 end
+
+
+function collect_chains(head::DChainNode)
+
+    all_chains = Vector{Vector{DChainNode}}()
+
+    function _chain_builder(node::DChainNode, chain::Vector{DChainNode})
+
+        if isempty(node.subobjects)
+            push!(all_chains, chain)
+        else
+            for subnode in node.subobjects
+                chain_path = [chain..., subnode]
+                _chain_builder(subnode, chain_path)
+            end
+        end
+    end
+
+    list = Vector{DChainNode}()
+    push!(list, head)
+    _chain_builder(head, list)
+    return all_chains
+end
+
+############################################################
+#
+#  Construction of filtrations
+#
+############################################################
 
 function _prune_and_collect_subspaces(
     head::Union{DChainNode{AbstractAlgebra.Generic.FreeModule{FqFieldElem}},DChainNode{AbstractAlgebra.Generic.Submodule{FqFieldElem}}},
@@ -148,51 +179,25 @@ function _chain_finder(head::DChainNode)
     for chain in chains
         temp_d = 0
         for i = 1:(length(chain)-1)
-            temp_d += dim(chain[i].object) - dim(chain[i+1])
+            temp_d = max(temp_d, dim(chain[i].object) - dim(chain[i+1].object))
         end
         if dim(chain[end].object) != 0
-            temp_d += dim(chain[end].object)
+            temp_d = max(temp_d, dim(chain[end].object))
         end
         if temp_d < d
             d = temp_d
             good_chain = chain
         end
+        #Could add logic for cases when the maximal dimension difference
+        #is achieved more than once. I.e. pick the longest chain?
     end
     return (d, good_chain)
 end
 
-function collect_chains(head::DChainNode)
-
-    all_chains = Vector{Vector{DChainNode}}()
-
-    function _chain_builder(node::DChainNode, chain::Vector{DChainNode})
-
-        if isempty(node.subobjects)
-            push!(all_chains, chain)
-        else
-            for subnode in node.subobjects
-                chain_path = [chain..., subnode]
-                _chain_builder(subnode, chain_path)
-            end
-        end
-    end
-
-    list = Vector{DChainNode}()
-    push!(list, head)
-    _chain_builder(head, list)
-    return all_chains
-end
-
-############################################################
-#
-#  Construction of filtrations
-#
-############################################################
-
 function _polynomial_sampler(components, num_samples)
 
     len = length(components)
-    num_component_samples = ceil(Int, (1 + log(len)) * (num_samples)^(1 / len))
+    num_component_samples = ceil(Int, ((1 + log(len)) * (num_samples))^(1 / len))
     rand_R_polys = []
     for V in components
         component_samples = []
@@ -301,7 +306,7 @@ function _chain_constructor(F, a, n, d; waring_samples=48, basis_samples=100, ve
                 Waring_iterator = Iterators.product(rand_R_polys...)
 
 
-                max_samples = Int(min(BigInt(q^dim(L)), waring_samples))
+                max_samples = Int(min(2*BigInt(q^dim(L)), waring_samples))
                 sample_range = collect(1:max_samples)
                 sample_range_chunks = Iterators.partition(sample_range, cld(max_samples, Threads.nthreads()))
 
@@ -356,3 +361,53 @@ function _chain_constructor(F, a, n, d; waring_samples=48, basis_samples=100, ve
     end
     return head
 end
+
+#####################################################################
+#
+#   Projective equivalence classes maker
+#
+#####################################################################
+
+function quotient_matrix(M, V, p, W)
+
+    #M is a matrix, representing PGL element
+    #V is vector space, W is quotient V/U, and p is projection V->W
+    #iterate over basis for W:
+    #1. pick preimage of basis element
+    #2. do action of matrix in V
+    #3. project down to W, get new vector
+    #4. Assemble these vectors into a matrix
+    
+end
+
+function projective_hypersurface_equivalence_classes_from_filtration(filt)
+
+    #could possibly get n,d from filt?
+    #
+    # I think the following works:
+    # take filtration 0<V_k<V_(k-1)<...<V_2<V_1<V
+    # Compute V->V/V_k->V/V_(k-1)->...->V/V_2->V/V_1
+    # Maybe put in a list
+    #
+    # Make a set S of 0 in V/V_1
+    # 
+    # new func(set_of_orbit_reps, Maybe V/V_(i+1)->V/V_i)
+    #   for element in orbit reps set
+    #       make PGL stabilizing subgroup
+    #
+    #   do orbit find on coset of V/V_i with stabilizing subgroup
+    #   (returns a set. Splat the set into a bigger set).
+    #
+    #   return set_of_orbit_reps
+    #
+    #   for i=1:k+1
+    #       S=func(S,V/V_(i+1)->V/V_i)
+    #
+    #   return S
+    #   
+
+end
+
+#TODO: 1) Need a function that makes an action matrix on a quotient vector space
+# 2) Need a function that runs the algorithm "recursively" on a filtration
+# 3) Need a function filters through PGL and finds the stabilizer of an action matrix
