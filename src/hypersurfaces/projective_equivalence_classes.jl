@@ -215,6 +215,20 @@ function is_PGL_rep(A::FqMatrix)
 
 end
 
+function PGL(n::Int, F::FqField)
+
+    q = order(F)
+    M = matrix_space(F, n, n)
+    group_order = prod([q^n - q^i for i = 0:n-1]) / (q - 1)
+    PGL_iter = Iterators.filter(A -> is_PGL_rep(A), M)
+    PGL_vec = Vector{FqMatrix}()
+    sizehint!(PGL_vec, Int(group_order))
+    for A in PGL_iter
+        push!(PGL_vec, A)
+    end
+    return PGL_vec
+end
+
 #####################################################################
 #
 #   Projective equivalence classes (orbit find)
@@ -288,8 +302,7 @@ function _projective_hypersurface_equivalence_classes1(p::Int, r::Int, n::Int, d
     #Set-up
     q = p^r
     F = GF(q)
-    M = matrix_space(F, n + 1, n + 1)
-    R, x = polynomial_ring(F, ["x$i" for i = 0:n])
+    R, _ = polynomial_ring(F, ["x$i" for i = 0:n])
     monomial_basis = homogeneous_monomial_basis(R, d)
 
 
@@ -303,14 +316,8 @@ function _projective_hypersurface_equivalence_classes1(p::Int, r::Int, n::Int, d
     println("Polynomials built")
 
     #Create an itertator for representatives of PGL_(n+1)
-    order = prod([q^(n + 1) - q^i for i = 0:n]) / (q - 1)
-    PGL_iter = Iterators.filter(A -> is_PGL_rep(A), M)
-    PGL = Vector{FqMatrix}()
-    sizehint!(PGL, Int(order))
-    for A in PGL_iter
-        push!(PGL, A)
-    end
-    PGL_chunks = Iterators.partition(PGL, cld(Int(order), Threads.nthreads()))
+    PGL_vec = PGL(n + 1, F)
+    PGL_chunks = Iterators.partition(PGL_vec, cld(length(PGL_vec), Threads.nthreads()))
 
     println("Starting collection process")
     representatives = Set{FqMPolyRingElem}()
@@ -340,8 +347,7 @@ function _projective_hypersurface_equivalence_classes2(p::Int, r::Int, n::Int, d
     #Set-up
     q = p^r
     F = GF(q)
-    M = matrix_space(F, n + 1, n + 1)
-    R, x = polynomial_ring(F, ["x$i" for i = 0:n])
+    R, _ = polynomial_ring(F, ["x$i" for i = 0:n])
     monomial_basis = homogeneous_monomial_basis(R, d)
 
     #Create an iterator for representatives of nonzero homogeneous degree d polynomials over F
@@ -350,14 +356,8 @@ function _projective_hypersurface_equivalence_classes2(p::Int, r::Int, n::Int, d
 
     println("Beginning memory allocation")
     #Create an itertator for representatives of PGL_(n+1)
-    order = prod([q^(n + 1) - q^i for i = 0:n]) / (q - 1)
-    PGL_iter = Iterators.filter(A -> is_PGL_rep(A), M)
-    PGL = Vector{FqMatrix}()
-    sizehint!(PGL, Int(order))
-    for A in PGL_iter
-        push!(PGL, A)
-    end
-    PGL_chunks = Iterators.partition(PGL, cld(Int(order), Threads.nthreads()))
+    PGL_vec = PGL(n + 1, F)
+    PGL_chunks = Iterators.partition(PGL_vec, cld(length(PGL_vec), Threads.nthreads()))
     println("Starting collection process")
     representatives = Set{FqMPolyRingElem}()
 
