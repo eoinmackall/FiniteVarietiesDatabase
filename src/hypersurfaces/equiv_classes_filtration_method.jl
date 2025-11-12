@@ -321,17 +321,54 @@ end
 #
 #####################################################################
 
-function quotient_matrix(M, V, p, W)
-
-    #M is a matrix, representing PGL element
-    #V is vector space, W is quotient V/U, and p is projection V->W
-    #iterate over basis for W:
-    #1. pick preimage of basis element
-    #2. do action of matrix in V
-    #3. project down to W, get new vector
-    #4. Assemble these vectors into a matrix
-
+function is_stabilizing(A, vec, preim, p, inc, inv_inc)
+        # Function to check if a matrix A stabilizes a vector vec
+        
+        
+        
 end
+
+function lift_orbit_representatives(ImV_i, W_i, p, q, inc, inv_inc, f_i, orbits, GL_vec)
+    R=codomain(inc)
+    x=gens(R)
+    # W_i=V/V_i, f_i = V/V_{i+1}-> V/V_i, pi = V->W_i 
+    # inc and inv_inc go between V and R_d = homogeneous_component of degree d
+    # orbits = set in V/V_i
+    new_orbits = Set()
+
+    Im_i=Set(collect(ImV_i))
+
+    for vec in orbits
+        
+        stabilizing_subgroup = Vector{FqMatrix}()
+        for A in GL_vec
+            if is_stabilizing(A)
+                push!(stabilizing_subgroup,A)
+            end
+        end
+
+
+        lift = preimage(f_i, vec) # preimage in V/V_{i+1}
+        
+        coset = lift .+ Im_i
+
+        while !isempty(coset)
+            g=first(coset)
+            g_orbits = Set()
+            push!(new_orbits, g)
+            for A in stabilizing_subgroup
+                f=inc(preimage(q,g))
+                y=A*x
+                h=f(y...)
+                orbit_vec = q(inv_inc(h))
+                push!(g_orbits, orbit_vec)
+            end
+            setdiff!(coset,g_orbits)
+        end
+    end
+    return new_orbits
+end
+
 
 function projective_hypersurface_equivalence_classes_from_filtration(F, a, n, d; waring_samples=48, basis_samples=100, verbose=false)
 
@@ -344,11 +381,11 @@ function projective_hypersurface_equivalence_classes_from_filtration(F, a, n, d;
         println("Beginning orbit collection")
     end
 
-    PGL_vec = PGL(n + 1, F)
+    GL_vec = GL(n + 1, F)
 
     orbits = Set()
 
-    #Need to add some kind of check for if there's just a one-step filtration
+    #Need to add some kind of check for if there's just a one-step filtration or irreducible
     quotients = []
     for i=1:length(filtration)-2
         push!(quotients,quo(V,(filtration[end-i].object)[1]))
@@ -364,10 +401,14 @@ function projective_hypersurface_equivalence_classes_from_filtration(F, a, n, d;
         push!(projection_maps, pi)
     end
 
-    return projection_maps
+    # Need to make images of quotients here.
 
-
-
+    # Find orbits in V/V_1, add to orbits.
+    #
+    #
+    #
+    
+    
 
     #could possibly get n,d from filt?
     #

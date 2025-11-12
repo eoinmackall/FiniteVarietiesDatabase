@@ -229,6 +229,21 @@ function PGL(n::Int, F::FqField)
     return PGL_vec
 end
 
+function GL(n::Int, F::FqField)
+
+    q = order(F)
+    M = matrix_space(F, n, n)
+    group_order = prod([q^n - q^i for i = 0:n-1])    
+    GL_iter = Iterators.filter(A -> (det(A) != 0), M)
+    GL_vec = Vector{FqMatrix}()
+    sizehint!(GL_vec, Int(group_order))
+    for A in GL_iter
+        push!(GL_vec, A)
+    end
+    return GL_vec
+end
+
+
 #####################################################################
 #
 #   Projective equivalence classes (orbit find)
