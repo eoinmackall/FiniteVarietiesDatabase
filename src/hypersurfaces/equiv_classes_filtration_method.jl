@@ -82,11 +82,11 @@ end
 #
 ############################################################
 
-function complete_poset(head::DChainNode, nodes::Set{DChainNode})
+function _complete_poset(head::DChainNode, nodes::Set{DChainNode})
 
     for node1 in nodes
         for node2 in nodes
-            if node1==node2
+            if node1 == node2
                 continue
             end
             has_intermediate_term = false
@@ -134,7 +134,7 @@ function _chain_finder(head::DChainNode)
             good_chain = chain
         end
         if temp_d == d
-            good_chain = max(length, good_chain, chain)
+            good_chain = length(chain)<length(good_chain) ? chain : good_chain
         end
     end
     return (d, good_chain)
@@ -228,7 +228,7 @@ function _chain_constructor(F, a, n, d; waring_samples=48, basis_samples=100, ve
 
     head = DChainNode((Rd, inc))
 
-    X, Y = GL_generators(F, a, n+1)
+    X, Y = GL_generators(F, a, n + 1)
 
     ALL = Set{DChainNode}()
     seen_weights = []
@@ -264,7 +264,7 @@ function _chain_constructor(F, a, n, d; waring_samples=48, basis_samples=100, ve
                 Waring_iterator = Iterators.product(rand_R_polys...)
 
 
-                max_samples = Int(min(2*BigInt(q^dim(L)), waring_samples))
+                max_samples = Int(min(2 * BigInt(q^dim(L)), waring_samples))
                 sample_range = collect(1:max_samples)
                 sample_range_chunks = Iterators.partition(sample_range, cld(max_samples, Threads.nthreads()))
 
@@ -298,10 +298,10 @@ function _chain_constructor(F, a, n, d; waring_samples=48, basis_samples=100, ve
             push!(seen_weights, divs)
         end
     end
-    
+
     push!(ALL, head)
-    complete_poset(head, ALL)
-    
+    _complete_poset(head, ALL)
+
     if verbose == true
         chains = collect_chains(head)
         println("Found the following chains:")
@@ -330,10 +330,44 @@ function quotient_matrix(M, V, p, W)
     #2. do action of matrix in V
     #3. project down to W, get new vector
     #4. Assemble these vectors into a matrix
-    
+
 end
 
-function projective_hypersurface_equivalence_classes_from_filtration(filt)
+function projective_hypersurface_equivalence_classes_from_filtration(F, a, n, d; waring_samples=48, basis_samples=100, verbose=false)
+
+    head = _chain_constructor(F, a, n, d; waring_samples, basis_samples, verbose)
+    rel_dim, filtration = _chain_finder(head)
+    V, poly = head.object
+
+    if verbose == true
+        println("Found chain with maximal relative dimension = ", rel_dim)
+        println("Beginning orbit collection")
+    end
+
+    PGL_vec = PGL(n + 1, F)
+
+    orbits = Set()
+
+    #Need to add some kind of check for if there's just a one-step filtration
+    quotients = []
+    for i=1:length(filtration)-2
+        push!(quotients,quo(V,(filtration[end-i].object)[1]))
+    end
+
+    projection_maps = []
+    for i=1:length(quotients)-1
+        Source_quo, quo_source = quotients[i]
+        Target_quo, quo_target = quotients[i+1]
+
+        gen_images = [quo_target(preimage(quo_source, v)) for v in gens(Source_quo)]
+        pi = ModuleHomomorphism(Source_quo, Target_quo, gen_images)
+        push!(projection_maps, pi)
+    end
+
+    return projection_maps
+
+
+
 
     #could possibly get n,d from filt?
     #
@@ -358,7 +392,6 @@ function projective_hypersurface_equivalence_classes_from_filtration(filt)
     #
     #   return S
     #   
-
 end
 
 #TODO: 1) Need a function that makes an action matrix on a quotient vector space
