@@ -229,7 +229,7 @@ function PGL(n::Int, F::FqField)
     return PGL_vec
 end
 
-function GL(n::Int, F::FqField)
+function _GL(n::Int, F::FqField)
 
     q = order(F)
     M = matrix_space(F, n, n)
@@ -291,7 +291,7 @@ end
 
 
 @doc raw"""
-projective_hypersurface_equivalence_classes(p::Int, r::Int, n::Int, d::Int; cached::Bool=false)
+projective_hypersurface_equivalence_classes(F::FqField, n::Int, d::Int; cached::Bool=false)
 
 Produces a set of polynomial representatives for projective equivalence
 classes of hypersurfaces of degree d in ``\mathbb{P}^n`` over a finite field
@@ -303,38 +303,43 @@ Setting cached=true will preallocate a vector of representatives for ``\mathbb{P
 where ``V`` is the vector space of homogeneous polynomials of degree d in n+1 variables.
 This is a faster method, but can easily cause the system to run out of memory.
 """
-function projective_hypersurface_equivalence_classes(p::Int, r::Int, n::Int, d::Int; cached::Bool=false)
+function projective_hypersurface_equivalence_classes(F::FqField, n::Int, d::Int; cached::Bool=false, verbose::Bool=false)
 
     if cached
-        return _projective_hypersurface_equivalence_classes1(p, r, n, d)
+        return _projective_hypersurface_equivalence_classes1(F, n, d; verbose)
     else
-        return _projective_hypersurface_equivalence_classes2(p, r, n, d)
+        return _projective_hypersurface_equivalence_classes2(F, n, d; verbose)
     end
 end
 
-function _projective_hypersurface_equivalence_classes1(p::Int, r::Int, n::Int, d::Int)
+function _projective_hypersurface_equivalence_classes1(F::FqField, n::Int, d::Int; verbose::Bool=false)
 
     #Set-up
-    q = p^r
-    F = GF(q)
+    q=Int(order(F))
     R, _ = polynomial_ring(F, ["x$i" for i = 0:n])
     monomial_basis = homogeneous_monomial_basis(R, d)
 
-
-    println("Beginning memory allocation")
+    if verbose == true
+        println("Beginning memory allocation")
+    end
     #Create an iterator for representatives of nonzero homogeneous degree d polynomials over F
     homogeneous_polynomials_iterator = (sum(c * m for (c, m) in zip(coeffs, monomial_basis))
                                         for coeffs in ProjectiveCoefficients(F, binomial(n + d, d) - 1))
     homogeneous_polynomials = Set{FqMPolyRingElem}()
     sizehint!(homogeneous_polynomials, q^(binomial(n + d, d) - 1))
     union!(homogeneous_polynomials, homogeneous_polynomials_iterator)
-    println("Polynomials built")
+    if verbose == true
+        println("Polynomials built")
+    end
 
     #Create an itertator for representatives of PGL_(n+1)
     PGL_vec = PGL(n + 1, F)
     PGL_chunks = Iterators.partition(PGL_vec, cld(length(PGL_vec), Threads.nthreads()))
 
-    println("Starting collection process")
+    if verbose == true
+        println("Starting collection process")
+    end
+
     representatives = Set{FqMPolyRingElem}()
     try
         while !isempty(homogeneous_polynomials)
@@ -357,11 +362,9 @@ function _projective_hypersurface_equivalence_classes1(p::Int, r::Int, n::Int, d
     end
 end
 
-function _projective_hypersurface_equivalence_classes2(p::Int, r::Int, n::Int, d::Int)
+function _projective_hypersurface_equivalence_classes2(F::FqField, n::Int, d::Int; verbose::Bool = false)
 
     #Set-up
-    q = p^r
-    F = GF(q)
     R, _ = polynomial_ring(F, ["x$i" for i = 0:n])
     monomial_basis = homogeneous_monomial_basis(R, d)
 
@@ -369,11 +372,18 @@ function _projective_hypersurface_equivalence_classes2(p::Int, r::Int, n::Int, d
     homogeneous_polynomials = (sum(c * m for (c, m) in zip(coeffs, monomial_basis))
                                for coeffs in ProjectiveCoefficients(F, binomial(n + d, d) - 1))
 
-    println("Beginning memory allocation")
+    if verbose == true
+        println("Beginning memory allocation")
+    end
+
     #Create an itertator for representatives of PGL_(n+1)
     PGL_vec = PGL(n + 1, F)
     PGL_chunks = Iterators.partition(PGL_vec, cld(length(PGL_vec), Threads.nthreads()))
-    println("Starting collection process")
+    
+    if verbose == true
+        println("Starting collection process")
+    end
+
     representatives = Set{FqMPolyRingElem}()
 
     try

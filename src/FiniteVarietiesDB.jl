@@ -15,13 +15,13 @@ export delete_subnode!
 export is_in
 export collect_chains
 
-export GL_generators
 export homogeneous_monomial_basis
 export HomogeneousExponents
 export normal_forms
 export orbit_size
 export PGL
 export projective_hypersurface_equivalence_classes
+export projective_hypersurface_equivalence_classes_from_filtration
 export ProjectiveCoefficients
 export symmetric_representation
 

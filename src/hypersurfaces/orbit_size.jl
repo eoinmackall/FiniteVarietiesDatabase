@@ -43,16 +43,15 @@ function symmetric_representation(A::FqMatrix, d::Int)
 end
 
 """
-normal_forms(p::Int, r::Int, n::Int)
+normal_forms(F::FqField, n::Int)
 
 Reutrns a dictionary with keys a representative of each conjugacy class
-of GL(n+1,p^r) and with values the size of the corresponding class.
+of GL(n+1,F) and with values the size of the corresponding class.
 """
-function normal_forms(p::Int, r::Int, n::Int)
+function normal_forms(F::FqField, n::Int)
 
-    F = GF(p^r)
-
-    G = GAP.Globals.GL(n + 1, p^r)
+    q = Int(order(F))
+    G = GAP.Globals.GL(n + 1, q)
     C = GAP.Globals.ConjugacyClasses(G)
     len = GAP.Globals.Length(C)
 
