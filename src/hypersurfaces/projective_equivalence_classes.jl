@@ -334,7 +334,7 @@ function _projective_hypersurface_equivalence_classes1(F::FqField, n::Int, d::In
 
     #Create an itertator for representatives of PGL_(n+1)
     PGL_vec = PGL(n + 1, F)
-    PGL_chunks = Iterators.partition(PGL_vec, cld(length(PGL_vec), Threads.nthreads()))
+    PGL_chunks = Iterators.partition(PGL_vec, cld(length(PGL_vec), nthreads()))
 
     if verbose == true
         println("Starting collection process")
@@ -346,7 +346,7 @@ function _projective_hypersurface_equivalence_classes1(F::FqField, n::Int, d::In
             f = first(homogeneous_polynomials)
             push!(representatives, f)
             tasks = map(PGL_chunks) do chunk
-                Threads.@spawn _add_to_equiv_class(chunk, R, f)
+                @spawn _add_to_equiv_class(chunk, R, f)
             end
             partial_equiv_classes = fetch.(tasks)
             setdiff!(homogeneous_polynomials, partial_equiv_classes...)
@@ -378,7 +378,7 @@ function _projective_hypersurface_equivalence_classes2(F::FqField, n::Int, d::In
 
     #Create an itertator for representatives of PGL_(n+1)
     PGL_vec = PGL(n + 1, F)
-    PGL_chunks = Iterators.partition(PGL_vec, cld(length(PGL_vec), Threads.nthreads()))
+    PGL_chunks = Iterators.partition(PGL_vec, cld(length(PGL_vec), nthreads()))
     
     if verbose == true
         println("Starting collection process")

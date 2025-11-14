@@ -266,10 +266,10 @@ function _chain_constructor(F, a, n, d; waring_samples=48, basis_samples=100, ve
 
                 max_samples = Int(min(2 * BigInt(q^dim(L)), waring_samples))
                 sample_range = collect(1:max_samples)
-                sample_range_chunks = Iterators.partition(sample_range, cld(max_samples, Threads.nthreads()))
+                sample_range_chunks = Iterators.partition(sample_range, cld(max_samples, nthreads()))
 
                 tasks = map(sample_range_chunks) do chunk
-                    Threads.@spawn begin
+                    @spawn begin
                         partial = Set()
                         gens = Vector{AbstractAlgebra.Generic.FreeModuleElem{FqFieldElem}}()
                         for _ in chunk
@@ -344,10 +344,10 @@ function lift_orbit_representatives(x, ImV_i, p, poly, q, inv_poly, f_i, orbits,
 
     Im_i=ImV_i[2].((ImV_i)[1])
 
-    orbits_chunks = Iterators.partition(orbits, cld(length(orbits), Threads.nthreads()))
+    orbits_chunks = Iterators.partition(orbits, cld(length(orbits), nthreads()))
 
     tasks = map(orbits_chunks) do chunk
-        Threads.@spawn begin
+        @spawn begin
             partial_orbit_reps = Set()
             for vec in chunk
                 preim = preimage(p,vec)
@@ -363,7 +363,7 @@ function lift_orbit_representatives(x, ImV_i, p, poly, q, inv_poly, f_i, orbits,
                 coset = Set(lift+v for v in Im_i)
 
                 while !isempty(coset)
-                    g=first(coset)
+                    g=pop!(coset)
                     g_orbits = Set()
                     push!(partial_orbit_reps, g)
                     for A in stabilizing_subgroup
@@ -393,10 +393,10 @@ function final_lift_orbit_representatives(x, ImV_i, p, poly, q, inv_poly, f_i, o
 
     Im_i=ImV_i[2].((ImV_i)[1])
 
-    orbits_chunks = Iterators.partition(orbits, cld(length(orbits), Threads.nthreads()))
+    orbits_chunks = Iterators.partition(orbits, cld(length(orbits), nthreads()))
 
     tasks = map(orbits_chunks) do chunk
-        Threads.@spawn begin
+        @spawn begin
             partial_orbit_reps = Set()
             for vec in chunk
                 preim = preimage(p,vec)
@@ -412,7 +412,7 @@ function final_lift_orbit_representatives(x, ImV_i, p, poly, q, inv_poly, f_i, o
                 coset = Set(lift+v for v in Im_i)
 
                 while !isempty(coset)
-                    g=first(coset)
+                    g=pop!(coset)
                     g_orbits = Set()
                     push!(partial_orbit_reps, forget_grading(poly(g)))
                     for A in stabilizing_subgroup
@@ -470,11 +470,7 @@ function projective_hypersurface_equivalence_classes_from_filtration(F, a, n, d;
         println("Found chain with maximal relative dimension = ", rel_dim)
         println("Beginning orbit collection")
     end
-
-    GL_vec = _GL(n + 1, F)
-
-    orbits = Set()
-
+ 
     quotients = []
     for i=1:length(filtration)-2
         push!(quotients,quo(V,(filtration[end-i].object)[1]))
@@ -504,21 +500,24 @@ function projective_hypersurface_equivalence_classes_from_filtration(F, a, n, d;
         println("Starting stage #1 -- finding orbits in V/V_1")
     end
 
+    GL_vec = _GL(n + 1, F)
+    orbits = Set()
+
     # Find orbits in V/V_2, add to orbits.
     W_2, f_2 = quotients[end]
     starting_vecs = Set(W_2)
     while !isempty(starting_vecs)
-        vec = first(starting_vecs)
+        vec = pop!(starting_vecs)
         push!(orbits,vec)
         orbit_of_vec = Set()
         
         lift = preimage(f_2, vec)
         f = poly(lift)
         
-        GL_chunks = Iterators.partition(GL_vec, cld(length(GL_vec), Threads.nthreads()))
+        GL_chunks = Iterators.partition(GL_vec, cld(length(GL_vec), nthreads()))
 
         tasks = map(GL_chunks) do chunk
-            Threads.@spawn begin
+            @spawn begin
                 chunk_orbit = Set()
                 for A in chunk
                     y = A*x
@@ -549,7 +548,6 @@ function projective_hypersurface_equivalence_classes_from_filtration(F, a, n, d;
     if verbose == true
         println("Starting stage #3 -- finding reprsentatives in V")
     end
-
 
     size = Int(orbit_size(normal_forms(F,n), d))
     pi = quotients[1][2]
