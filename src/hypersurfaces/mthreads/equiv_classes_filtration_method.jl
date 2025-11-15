@@ -322,56 +322,62 @@ end
 #
 #####################################################################
 
-function is_stabilizing(A, vec, preim_poly, p, x, inv_poly)
-    # Function to check if a matrix A stabilizes a vector vec
-
-    y = A*x
-    h=preim_poly(y...)
-    h_vec=inv_poly(h)
-    if vec == p(h_vec)
-        return true
-    else
-        return false
+function stabilizer_maker(G, orbits, action)
+    stabilizers = Vector{Vector{FqMatrix}}()
+    for vec in orbits
+        stabilizer_gens = Vector{FqMatrix}()
+        stab, _ = stabilizer(G, vec, action)
+        for g in gens(stab)
+            push!(stabilizer_gens, matrix(g))
+        end
+        push!(stabilizers, stabilizer_gens)
     end
+
+    return collect(zip(orbits,stabilizers))
 end
 
-function lift_orbit_representatives(x, ImV_i, p, poly, q, inv_poly, f_i, orbits, GL_vec)
+function lift_orbit_representatives(x, ImV_i, p, poly, q, inv_poly, f_i, orbits_and_stabilizers)
     # W_i=V/V_i, f_i = V/V_{i+1}-> V/V_i, pi = V->W_i 
     # inc and inv_inc go between V and R_d = homogeneous_component of degree d
     # orbits = set in V/V_i
     
-    new_orbits = Set()
+    new_orbits = []
 
     Im_i=ImV_i[2].((ImV_i)[1])
 
-    orbits_chunks = Iterators.partition(orbits, cld(length(orbits), nthreads()))
+    orbits_and_stabs_chunks = Iterators.partition(orbits_and_stabilizers, cld(length(orbits_and_stabilizers), nthreads()))
 
-    tasks = map(orbits_chunks) do chunk
+    tasks = map(orbits_and_stabs_chunks) do chunk
         Threads.@spawn begin
-            partial_orbit_reps = Set()
-            for vec in chunk
+            partial_orbit_reps = []
+            for pair in chunk
+                vec=pair[1]
+                stabilizing_subgroup=pair[2]
+                
                 preim = preimage(p,vec)
                 preim_poly = poly(preim)
-                stabilizing_subgroup = Vector{FqMatrix}()
-                for A in GL_vec
-                    if is_stabilizing(A, vec, preim_poly, p, x, inv_poly)
-                        push!(stabilizing_subgroup,A)
-                    end
-                end
-
+                
                 lift = preimage(f_i, vec) # preimage in V/V_{i+1}
                 coset = Set(lift+v for v in Im_i)
 
                 while !isempty(coset)
                     g=pop!(coset)
-                    g_orbits = Set()
                     push!(partial_orbit_reps, g)
-                    for A in stabilizing_subgroup
-                        f=poly(preimage(q,g))
-                        y=A*x
-                        h=f(y...)
-                        orbit_vec = q(inv_poly(h))
-                        push!(g_orbits, orbit_vec)
+                    
+                    g_orbits = Set()
+                    orbits_to_process = Set([g])
+                    while !isempty(orbits_to_process)
+                        g_vec = pop!(orbits_to_process)
+                        for A in stabilizing_subgroup
+                            f=poly(preimage(q,g_vec))
+                            y=A*x
+                            h=f(y...)
+                            orbit_vec = q(inv_poly(h))
+                            if !(orbit_vec in g_orbits)
+                                push!(g_orbits, orbit_vec)
+                                push!(orbits_to_process,orbit_vec)
+                            end
+                        end
                     end
                     setdiff!(coset,g_orbits)
                 end
@@ -379,11 +385,14 @@ function lift_orbit_representatives(x, ImV_i, p, poly, q, inv_poly, f_i, orbits,
             return partial_orbit_reps
         end
     end
-    union!(new_orbits, (fetch.(tasks))...)
+    
+    for partial_reps in fetch.(tasks)
+        append!(new_orbits, partial_reps)
+    end
     return new_orbits
 end
 
-function final_lift_orbit_representatives(x, ImV_i, p, poly, q, inv_poly, f_i, orbits, GL_vec, size)
+function final_lift_orbit_representatives(x, ImV_i, p, poly, q, inv_poly, f_i, orbits_and_stabilizers, size)
     # W_i=V/V_i, f_i = V/V_{i+1}-> V/V_i, pi = V->W_i 
     # inc and inv_inc go between V and R_d = homogeneous_component of degree d
     # orbits = set in V/V_i
@@ -393,34 +402,39 @@ function final_lift_orbit_representatives(x, ImV_i, p, poly, q, inv_poly, f_i, o
 
     Im_i=ImV_i[2].((ImV_i)[1])
 
-    orbits_chunks = Iterators.partition(orbits, cld(length(orbits), nthreads()))
+    orbits_and_stabs_chunks = Iterators.partition(orbits_and_stabilizers, cld(length(orbits_and_stabilizers), nthreads()))
 
-    tasks = map(orbits_chunks) do chunk
+    tasks = map(orbits_and_stabs_chunks) do chunk
         Threads.@spawn begin
             partial_orbit_reps = Set()
-            for vec in chunk
+            for pair in chunk
+                vec=pair[1]
+                stabilizing_subgroup=pair[2]
+                
                 preim = preimage(p,vec)
                 preim_poly = poly(preim)
-                stabilizing_subgroup = Vector{FqMatrix}()
-                for A in GL_vec
-                    if is_stabilizing(A, vec, preim_poly, p, x, inv_poly)
-                        push!(stabilizing_subgroup,A)
-                    end
-                end
-
+                
                 lift = preimage(f_i, vec) # preimage in V/V_{i+1}
                 coset = Set(lift+v for v in Im_i)
 
                 while !isempty(coset)
                     g=pop!(coset)
-                    g_orbits = Set()
                     push!(partial_orbit_reps, forget_grading(poly(g)))
-                    for A in stabilizing_subgroup
-                        f=poly(preimage(q,g))
-                        y=A*x
-                        h=f(y...)
-                        orbit_vec = q(inv_poly(h))
-                        push!(g_orbits, orbit_vec)
+                    
+                    g_orbits = Set()
+                    orbits_to_process = Set([g])
+                    while !isempty(orbits_to_process)
+                        g_vec = pop!(orbits_to_process)
+                        for A in stabilizing_subgroup
+                            f=poly(preimage(q,g_vec))
+                            y=A*x
+                            h=f(y...)
+                            orbit_vec = q(inv_poly(h))
+                            if !(orbit_vec in g_orbits)
+                                push!(g_orbits, orbit_vec)
+                                push!(orbits_to_process,orbit_vec)
+                            end
+                        end
                     end
                     setdiff!(coset,g_orbits)
                 end
@@ -500,38 +514,55 @@ function projective_hypersurface_equivalence_classes_from_filtration(F, a, n, d;
         println("Starting stage #1 -- finding orbits in V/V_1")
     end
 
-    GL_vec = _GL(n + 1, F)
-    orbits = Set()
+    G = GL(n + 1, F)
+    GL_gens = [matrix(g) for g in gens(G)]
+    orbits = []
 
     # Find orbits in V/V_2, add to orbits.
     W_2, f_2 = quotients[end]
     starting_vecs = Set(W_2)
+
+    action_stage1 = (v, A) -> begin
+        A = matrix(A)
+        f = poly(preimage(f_2, v))
+        y = A*x
+        g = f(y...)
+        g_vec = inv_poly(g)
+        return f_2(g_vec)
+    end
+
     while !isempty(starting_vecs)
         vec = pop!(starting_vecs)
-        push!(orbits,vec)
-        orbit_of_vec = Set()
+        push!(orbits, vec)
         
-        lift = preimage(f_2, vec)
-        f = poly(lift)
-        
-        GL_chunks = Iterators.partition(GL_vec, cld(length(GL_vec), nthreads()))
+        orbit_of_vec = Set([vec])
+        orbit_to_process = Set([vec])
 
-        tasks = map(GL_chunks) do chunk
-            Threads.@spawn begin
-                chunk_orbit = Set()
-                for A in chunk
-                    y = A*x
-                    g = f(y...)
-                    g_vec = inv_poly(g)
-                    orbit_vec = f_2(g_vec)
-                    push!(chunk_orbit, orbit_vec)
+        while !isempty(orbit_to_process)
+
+            v=pop!(orbit_to_process)
+            for A in GL_gens
+                h_vec = action_stage1(v,A)
+                if !(h_vec in orbit_of_vec)
+                    push!(orbit_of_vec, h_vec)
+                    push!(orbit_to_process, h_vec)
                 end
-                return chunk_orbit
+
             end
         end
-        union!(orbit_of_vec, (fetch.(tasks))...)
-        setdiff!(starting_vecs,orbit_of_vec)
+        setdiff!(starting_vecs, orbit_of_vec)
     end
+
+    orbit_action_stage1 = (v, A) -> begin
+        A = matrix(A)
+        f = poly(preimage(f_2, v))
+        y = A*x
+        g = f(y...)
+        g_vec = inv_poly(g)
+        return f_2(g_vec)
+    end
+
+    orbits_and_stabilizers = stabilizer_maker(G, orbits,orbit_action_stage1)
 
     if verbose == true
         println("Starting stage #2 -- lifting orbits along chain")
@@ -542,7 +573,18 @@ function projective_hypersurface_equivalence_classes_from_filtration(F, a, n, d;
         f_i = projection_maps[i]
         p = quotients[i+1][2]
         q = quotients[i][2]
-        orbits = lift_orbit_representatives(x, ImV_i, p, poly, q, inv_poly, f_i, orbits, GL_vec)
+        orbits = lift_orbit_representatives(x, ImV_i, p, poly, q, inv_poly, f_i, orbits_and_stabilizers)
+        
+        orbit_action_stage2 = (v, A) -> begin
+            A = matrix(A)
+            f = poly(preimage(q, v))
+            y = A*x
+            g = f(y...)
+            g_vec = inv_poly(g)
+            return q(g_vec)
+        end
+
+        orbits_and_stabilizers = stabilizer_maker(G, orbits, orbit_action_stage2)
     end
 
     if verbose == true
@@ -553,7 +595,7 @@ function projective_hypersurface_equivalence_classes_from_filtration(F, a, n, d;
     pi = quotients[1][2]
     V_fin = (filtration[end-1].object)
     id = identity_map(V)
-    poly_reps=final_lift_orbit_representatives(x, V_fin, pi, poly, id, inv_poly, pi, orbits, GL_vec, size)
+    poly_reps=final_lift_orbit_representatives(x, V_fin, pi, poly, id, inv_poly, pi, orbits_and_stabilizers, size)
     delete!(poly_reps, forget_grading(R(0)))
 
     return poly_reps
