@@ -2,12 +2,13 @@ module FiniteVarietiesDB
 
 using Oscar
 using Base.Threads
+using Distributed
 import Base: ==, hash
 
-include("./hypersurfaces/equiv_classes_filtration_method.jl")
-include("./hypersurfaces/orbit_size.jl")
-include("./hypersurfaces/projective_equivalence_classes.jl")
-
+include("./hypersurfaces/mthreads/equiv_classes_filtration_method.jl")
+include("./hypersurfaces/mthreads/orbit_size.jl")
+include("./hypersurfaces/mthreads/projective_equivalence_classes.jl")
+#include("./hypersurfaces/mprocs/equiv_classes_filtration_method2.jl")
 
 export DChainNode
 export add_subnode!

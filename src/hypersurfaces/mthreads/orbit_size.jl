@@ -108,7 +108,7 @@ function orbit_size(normal_forms::Dict{FqMatrix,BigInt}, d::Int)
     q = order(F)
     n = ncols(first(keys(normal_forms))) - 1
 
-    chunks = Iterators.partition(normal_forms, cld(length(normal_forms), Threads.nthreads()))
+    chunks = Iterators.partition(normal_forms, cld(length(normal_forms), nthreads()))
     tasks = map(chunks) do chunk
         chunk_dict = Dict(chunk)
         Threads.@spawn _conjugacy_number(chunk_dict, q, d, n)

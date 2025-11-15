@@ -2,4 +2,10 @@ name = "FiniteVarietiesDB"
 uuid = "30c72606-59d1-47a9-b9ee-5125b74b420d"
 
 [deps]
+Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
+DuckDB = "d2f5444f-75bc-4fdf-ac35-56f514c445e1"
 Oscar = "f1435218-dba5-11e9-1e4d-f1a5fab5fc13"
+
+[compat]
+Distributed = "1.11.0"
+DuckDB = "1.4.1"

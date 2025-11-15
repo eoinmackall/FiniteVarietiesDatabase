@@ -346,7 +346,7 @@ function _projective_hypersurface_equivalence_classes1(F::FqField, n::Int, d::In
             f = first(homogeneous_polynomials)
             push!(representatives, f)
             tasks = map(PGL_chunks) do chunk
-                @spawn _add_to_equiv_class(chunk, R, f)
+                Threads.@spawn _add_to_equiv_class(chunk, R, f)
             end
             partial_equiv_classes = fetch.(tasks)
             setdiff!(homogeneous_polynomials, partial_equiv_classes...)
@@ -389,9 +389,9 @@ function _projective_hypersurface_equivalence_classes2(F::FqField, n::Int, d::In
     try
         for f in homogeneous_polynomials
             seen = Atomic{Bool}(false)
-            @sync begin
+            Threads.@sync begin
                 for chunk in PGL_chunks
-                    @spawn _add_to_equiv_class2(chunk, R, f, representatives, seen)
+                    Threads.@spawn _add_to_equiv_class2(chunk, R, f, representatives, seen)
                 end
             end
             if !seen[]

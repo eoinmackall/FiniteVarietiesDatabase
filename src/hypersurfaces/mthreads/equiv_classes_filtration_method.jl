@@ -269,7 +269,7 @@ function _chain_constructor(F, a, n, d; waring_samples=48, basis_samples=100, ve
                 sample_range_chunks = Iterators.partition(sample_range, cld(max_samples, nthreads()))
 
                 tasks = map(sample_range_chunks) do chunk
-                    @spawn begin
+                    Threads.@spawn begin
                         partial = Set()
                         gens = Vector{AbstractAlgebra.Generic.FreeModuleElem{FqFieldElem}}()
                         for _ in chunk
@@ -347,7 +347,7 @@ function lift_orbit_representatives(x, ImV_i, p, poly, q, inv_poly, f_i, orbits,
     orbits_chunks = Iterators.partition(orbits, cld(length(orbits), nthreads()))
 
     tasks = map(orbits_chunks) do chunk
-        @spawn begin
+        Threads.@spawn begin
             partial_orbit_reps = Set()
             for vec in chunk
                 preim = preimage(p,vec)
@@ -396,7 +396,7 @@ function final_lift_orbit_representatives(x, ImV_i, p, poly, q, inv_poly, f_i, o
     orbits_chunks = Iterators.partition(orbits, cld(length(orbits), nthreads()))
 
     tasks = map(orbits_chunks) do chunk
-        @spawn begin
+        Threads.@spawn begin
             partial_orbit_reps = Set()
             for vec in chunk
                 preim = preimage(p,vec)
@@ -517,7 +517,7 @@ function projective_hypersurface_equivalence_classes_from_filtration(F, a, n, d;
         GL_chunks = Iterators.partition(GL_vec, cld(length(GL_vec), nthreads()))
 
         tasks = map(GL_chunks) do chunk
-            @spawn begin
+            Threads.@spawn begin
                 chunk_orbit = Set()
                 for A in chunk
                     y = A*x
