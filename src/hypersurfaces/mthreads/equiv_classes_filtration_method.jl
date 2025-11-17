@@ -322,8 +322,28 @@ end
 #
 #####################################################################
 
+function action_map(A, quotient, poly, inv_poly, x)
+
+    W = quotient[1]
+    pi = quotient[2]
+    k = dim(W)
+    
+    action_map = Vector{elem_type(W)}()
+    sizehint!(action_map,k)
+    for v in gens(W)
+        v_vec = preimage(pi, v)
+        f = poly(v_vec)
+        y = A*x
+        g = f(y...)
+        w_vec = inv_poly(g)
+        w = pi(w_vec)
+        push!(action_map, w)
+    end
+    return ModuleHomomorphism(W,W, action_map)
+end
+
 function stabilizer_maker(G, orbits, action)
-    stabilizers = Vector{Vector{FqMatrix}}()
+    stabilizers = []
     for vec in orbits
         stabilizer_gens = Vector{FqMatrix}()
         stab, _ = stabilizer(G, vec, action)
@@ -333,7 +353,7 @@ function stabilizer_maker(G, orbits, action)
         push!(stabilizers, stabilizer_gens)
     end
 
-    return collect(zip(orbits,stabilizers))
+    return stabilizers
 end
 
 function lift_orbit_representatives(x, ImV_i, p, poly, q, inv_poly, f_i, orbits_and_stabilizers)
@@ -354,9 +374,6 @@ function lift_orbit_representatives(x, ImV_i, p, poly, q, inv_poly, f_i, orbits_
                 vec=pair[1]
                 stabilizing_subgroup=pair[2]
                 
-                preim = preimage(p,vec)
-                preim_poly = poly(preim)
-                
                 lift = preimage(f_i, vec) # preimage in V/V_{i+1}
                 coset = Set(lift+v for v in Im_i)
 
@@ -368,18 +385,15 @@ function lift_orbit_representatives(x, ImV_i, p, poly, q, inv_poly, f_i, orbits_
                     orbits_to_process = Set([g])
                     while !isempty(orbits_to_process)
                         g_vec = pop!(orbits_to_process)
-                        for A in stabilizing_subgroup
-                            f=poly(preimage(q,g_vec))
-                            y=A*x
-                            h=f(y...)
-                            orbit_vec = q(inv_poly(h))
+                        for f in stabilizing_subgroup
+                            orbit_vec = f(g_vec)
                             if !(orbit_vec in g_orbits)
                                 push!(g_orbits, orbit_vec)
-                                push!(orbits_to_process,orbit_vec)
+                                push!(orbits_to_process, orbit_vec)
                             end
                         end
                     end
-                    setdiff!(coset,g_orbits)
+                    setdiff!(coset, g_orbits)
                 end
             end
             return partial_orbit_reps
@@ -406,13 +420,10 @@ function final_lift_orbit_representatives(x, ImV_i, p, poly, q, inv_poly, f_i, o
 
     tasks = map(orbits_and_stabs_chunks) do chunk
         Threads.@spawn begin
-            partial_orbit_reps = Set()
+            partial_orbit_reps = Set{FqMPolyRingElem}()
             for pair in chunk
                 vec=pair[1]
                 stabilizing_subgroup=pair[2]
-                
-                preim = preimage(p,vec)
-                preim_poly = poly(preim)
                 
                 lift = preimage(f_i, vec) # preimage in V/V_{i+1}
                 coset = Set(lift+v for v in Im_i)
@@ -425,11 +436,8 @@ function final_lift_orbit_representatives(x, ImV_i, p, poly, q, inv_poly, f_i, o
                     orbits_to_process = Set([g])
                     while !isempty(orbits_to_process)
                         g_vec = pop!(orbits_to_process)
-                        for A in stabilizing_subgroup
-                            f=poly(preimage(q,g_vec))
-                            y=A*x
-                            h=f(y...)
-                            orbit_vec = q(inv_poly(h))
+                        for f in stabilizing_subgroup
+                            orbit_vec = f(g_vec)
                             if !(orbit_vec in g_orbits)
                                 push!(g_orbits, orbit_vec)
                                 push!(orbits_to_process,orbit_vec)
@@ -477,14 +485,14 @@ function projective_hypersurface_equivalence_classes_from_filtration(F, a, n, d;
     V, poly = head.object
     R=codomain(poly)
     x=gens(R)
-
+    id = identity_map(V)
     inv_poly = inv(poly)
 
     if verbose == true
         println("Found chain with maximal relative dimension = ", rel_dim)
         println("Beginning orbit collection")
     end
- 
+
     quotients = []
     for i=1:length(filtration)-2
         push!(quotients,quo(V,(filtration[end-i].object)[1]))
@@ -515,21 +523,12 @@ function projective_hypersurface_equivalence_classes_from_filtration(F, a, n, d;
     end
 
     G = GL(n + 1, F)
-    GL_gens = [matrix(g) for g in gens(G)]
+    GL_gens = [action_map(matrix(g),quotients[end], poly, inv_poly, x) for g in gens(G)]
     orbits = []
 
     # Find orbits in V/V_2, add to orbits.
     W_2, f_2 = quotients[end]
     starting_vecs = Set(W_2)
-
-    action_stage1 = (v, A) -> begin
-        A = matrix(A)
-        f = poly(preimage(f_2, v))
-        y = A*x
-        g = f(y...)
-        g_vec = inv_poly(g)
-        return f_2(g_vec)
-    end
 
     while !isempty(starting_vecs)
         vec = pop!(starting_vecs)
@@ -541,8 +540,8 @@ function projective_hypersurface_equivalence_classes_from_filtration(F, a, n, d;
         while !isempty(orbit_to_process)
 
             v=pop!(orbit_to_process)
-            for A in GL_gens
-                h_vec = action_stage1(v,A)
+            for f in GL_gens
+                h_vec = f(v)
                 if !(h_vec in orbit_of_vec)
                     push!(orbit_of_vec, h_vec)
                     push!(orbit_to_process, h_vec)
@@ -562,7 +561,18 @@ function projective_hypersurface_equivalence_classes_from_filtration(F, a, n, d;
         return f_2(g_vec)
     end
 
-    orbits_and_stabilizers = stabilizer_maker(G, orbits,orbit_action_stage1)
+    stabilizers = stabilizer_maker(G, orbits, orbit_action_stage1)
+    stabilizer_maps = Vector{Vector{AbstractAlgebra.Generic.ModuleHomomorphism{FqFieldElem}}}(undef, length(stabilizers))
+    @threads for i in eachindex(stabilizers)
+        num_gens = length(stabilizers[i])
+        gens_vec = Vector{AbstractAlgebra.Generic.ModuleHomomorphism{FqFieldElem}}(undef, num_gens)
+
+        for j in 1:num_gens
+            gens_vec[j]=action_map(stabilizers[i][j], quotients[end-1], poly, inv_poly, x)
+        end
+        stabilizer_maps[i]=gens_vec
+    end
+    orbits_and_stabilizers = collect(zip(orbits,stabilizer_maps))
 
     if verbose == true
         println("Starting stage #2 -- lifting orbits along chain")
@@ -584,7 +594,31 @@ function projective_hypersurface_equivalence_classes_from_filtration(F, a, n, d;
             return q(g_vec)
         end
 
-        orbits_and_stabilizers = stabilizer_maker(G, orbits, orbit_action_stage2)
+        stabilizers = stabilizer_maker(G, orbits, orbit_action_stage2)
+        stabilizer_maps = Vector{Vector{AbstractAlgebra.Generic.ModuleHomomorphism{FqFieldElem}}}(undef, length(stabilizers))
+
+        if i>1
+            @threads for j in eachindex(stabilizers)
+                num_gens = length(stabilizers[j])
+                gens_vec = Vector{AbstractAlgebra.Generic.ModuleHomomorphism{FqFieldElem}}(undef, num_gens)
+
+                for k in 1:num_gens
+                    gens_vec[k]=action_map(stabilizers[j][k], quotients[i-1], poly, inv_poly, x)
+                end
+                stabilizer_maps[j]= gens_vec
+            end
+        else
+            @threads for j in eachindex(stabilizers)
+                num_gens = length(stabilizers[j])
+                gens_vec = Vector{AbstractAlgebra.Generic.ModuleHomomorphism{FqFieldElem}}(undef, num_gens)
+
+                for k in 1:num_gens
+                    gens_vec[k]=action_map(stabilizers[j][k], (V,id), poly, inv_poly, x)
+                end
+                stabilizer_maps[j]= gens_vec
+            end
+        end
+        orbits_and_stabilizers = collect(zip(orbits,stabilizer_maps))
     end
 
     if verbose == true
@@ -594,7 +628,6 @@ function projective_hypersurface_equivalence_classes_from_filtration(F, a, n, d;
     size = Int(orbit_size(normal_forms(F,n), d))
     pi = quotients[1][2]
     V_fin = (filtration[end-1].object)
-    id = identity_map(V)
     poly_reps=final_lift_orbit_representatives(x, V_fin, pi, poly, id, inv_poly, pi, orbits_and_stabilizers, size)
     delete!(poly_reps, forget_grading(R(0)))
 
