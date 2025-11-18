@@ -593,11 +593,13 @@ function projective_hypersurface_equivalence_classes_from_filtration(F, a, n, d;
         println("Starting stage #2 -- lifting orbits along chain")
     end
 
+    
+    step = 1
     for i in (length(projection_maps)):-1:1
 
-        step = 1
         if verbose == true
             println("Lifting step: #", step)
+            step+=1
         end
 
         ImV_i = images[i]
