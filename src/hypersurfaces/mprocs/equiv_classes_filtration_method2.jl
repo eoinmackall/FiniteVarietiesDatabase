@@ -44,27 +44,9 @@
         return ModuleHomomorphism(W, W, action_morphism)
     end
 
-    function stabilizer_maker(G, orbits, action)
-        stabilizers = []
-        for vec in orbits
-            stab, _ = stabilizer(G, vec, action)
-            push!(stabilizers, stab)
-        end
-        return stabilizers
+    function compute_stabilizer_worker(orbit, parent_gens, f_i, p_map, poly, inv_poly, x)
+    #TODO: write this
     end
-
-    function stabilizer_maker_recursive(stabilizers, orbits, orbits_and_stabilizers, f_i, action)
-        new_stabilizers = []
-        for i in eachindex(orbits)
-            vec = orbits[i]
-            j = findfirst(pair -> pair[1] == f_i(vec), orbits_and_stabilizers)
-            G = stabilizers[j]
-            stab, _ = stabilizer(G, vec, action)
-            push!(new_stabilizers, stab)
-        end
-        return new_stabilizers
-    end
-
 
     function lift_orbit_representatives(x, ImV_i, p, poly, q, inv_poly, f_i, orbits_and_stabilizers)
         # W_i=V/V_i, f_i = V/V_{i+1}-> V/V_i, pi = V->W_i 
@@ -171,6 +153,29 @@ end
 #
 #####################################################################
 
+function stabilizer_maker_init(G, orbits, action)
+    stabilizer_gens = []
+    for vec in orbits
+        stab, _ = stabilizer(G, vec, action)
+        push!(stabilizers, [matrix(g) for g in gens(stab)])
+    end
+    return stabilizers
+end
+
+function stabilizer_maker_recursive_distributed(orbits, orbits_and_stabilizers, f_i, action)
+
+    parent_map_dict = Dict(pair[1] => pair[2] for pair in orbits_and_stabilizers)
+
+    stabilizers_gens = pmap(orbit -> begin
+        parent_vec = f_i(orbit)
+        parent_gens = parent_map_dict[parent_vec]
+
+        return compute_stabilizer_worker(orbit, parent_gens, f_i, p_map, poly, inv_poly, x)
+    end, orbits; batch_size = max(1, div(length(orbits), nworkers()*4)))
+
+    return stabilizer_gens
+end
+    
 function projective_hypersurface_equivalence_classes_from_filtration_mprocs(F, n, d;
     waring_samples=48, basis_samples=100, verbose=false, interactive=false)
 
@@ -269,7 +274,7 @@ function projective_hypersurface_equivalence_classes_from_filtration_mprocs(F, n
         setdiff!(starting_vecs, orbit_of_vec)
     end
 
-    stabilizers = stabilizer_maker(G, orbits, (v, A) -> action_for_stabilizer(A, v, f_2, poly, inv_poly, x))
+    stabilizers = stabilizer_maker_init(G, orbits, (v, A) -> action_for_stabilizer(A, v, f_2, poly, inv_poly, x))
     stabilizers_gens = Vector{Vector{FqMatrix}}(undef, length(stabilizers))
     for i in eachindex(stabilizers)
         stabilizers_gens[i] = [matrix(g) for g in gens(stabilizers[i])]
