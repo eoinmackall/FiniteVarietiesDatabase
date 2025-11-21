@@ -4,19 +4,24 @@
 #
 #####################################################################
 
-#TODO: make an introduction in here.
+# In this file you'll find functions for constructing a set of representatives
+# for all (nonzero) homogeneous polynomials of degree d in n+1 variables over,
+# a finite field F up to a linear change in variables.
 
-#TODO: Want to create a G-invariant filtration of subspaces in Sym^d(V), V=k{x_0,...,x_n}
-# 1. Need a way to create G-invariant subspaces. Maybe this is done already?
-# You can create these from weighted partitions. Should exclude trivial cases.
-# Basically, given a partition lambda= l_1>l_2>l_3>... and weights w=w_1,w_2,w_3,...
-# such that l_1*w_1+l_2*w_2+l_3*w_3+... = d, you can consider forms sum f_i^l_i where deg(f_i)=w_i
+# If F=GF(q) for some prime power q, and if gcd(q-1,d)=1, then this is also
+# a set of representatives for hypersurfaces of degree d in ``\mathbb{P}^n``.
+
+# There are two functions that accomplish this below:
+#   (1) projective_hypersurface_equivalence_classes_from_filtration
+#   (2) projective_hypersurface_equivalence_classes_from_filtration_GAP.
 #
-# 2. I think that I want to make a struct that keeps track of "chains" of subspaces.
-# This way, we can just call a function to build this struct from the above. Then, we can look among
-# the chains to find the best chain for performing the filtration algorithm.
-# Might as well make this accept an initial object and a terminal object, and allow for chains created
-# from there...
+# The general idea for both functions is the same, and follows the algorithm
+# specified in (https://arxiv.org/abs/2306.09908). However, their implementations
+# are technically different, due to the thread unsafe nature of Oscar's GAP
+# based stabilizer function.
+#
+# In general, the function (1) should be much faster. The function in (2) is
+# included as an artifact of the development process (and just in case).
 
 #####################################################################
 #
@@ -24,6 +29,8 @@
 #
 #####################################################################
 
+# This is the general algorithm used for finding the orbit of a vector
+# (called point) and producing the stabilizing subgroup of that vector.
 function orbit_stabilizer(G_gens, point, action_dict)
 
     orbit = Set([point])
@@ -47,6 +54,9 @@ function orbit_stabilizer(G_gens, point, action_dict)
     return (orbit, collect(stab_gens))
 end
 
+
+# Passing a set containing the point, we remove the orbit instead of return it.
+# This function is not actually used in the final function, see the following function.
 function orbit_stabilizer_pruning!(space::Set, G_gens, point, action_dict)
 
     orbit_to_process = Set([point])
@@ -69,6 +79,7 @@ function orbit_stabilizer_pruning!(space::Set, G_gens, point, action_dict)
     return collect(stab_gens)
 end
 
+# A version of the above, but optimized to reduce allocations.
 function orbit_stabilizer_pruning_optimized!(space::Set, G_gens, point, action_dict)
 
     orbit_to_process = [point]
@@ -107,6 +118,30 @@ function orbit_stabilizer_pruning_optimized!(space::Set, G_gens, point, action_d
     return collect(stab_gens)
 end
 
+# Instead of passing matrices, and determining their action on the
+# fly, we isntead determine the linear action induced by these matrices
+# on our corresponding filtration quotients.
+function action_morphism(A, quotient, poly, inv_poly, x)
+
+    W = quotient[1]
+    pi = quotient[2]
+    k = dim(W)
+
+    action_morphism = Vector{elem_type(W)}()
+    sizehint!(action_morphism, k)
+    for v in gens(W)
+        v_vec = preimage(pi, v)
+        f = poly(v_vec)
+        y = A * x
+        g = f(y...)
+        w_vec = inv_poly(g)
+        w = pi(w_vec)
+        push!(action_morphism, w)
+    end
+    return ModuleHomomorphism(W, W, action_morphism)
+end
+
+# For fast look-ups.
 function action_dictionary_parallel(G_gens, quotient, poly, inv_poly, x)
 
     results = Vector{Tuple{eltype(G_gens), AbstractAlgebra.Generic.ModuleHomomorphism{FqFieldElem}}}(undef, length(G_gens))
@@ -128,6 +163,240 @@ function action_dictionary(G_gens, quotient, poly, inv_poly, x)
     return action_dict
 end
 
+# The main driver behind lifting orbit-reps up our chain.
+function lift_orbit_reps(x, ImV_i, poly, q, inv_poly, f_i, orbits_stabilizers_dict)
+    # W_i=V/V_i, f_i = V/V_{i+1}-> V/V_i, pi = V->W_i 
+    # inc and inv_inc go between V and R_d = homogeneous_component of degree d
+    # orbits = set in V/V_i
+
+    W=domain(f_i)
+    new_orbits_stab_dict = Dict{elem_type(W), Vector{FqMatrix}}()
+
+    Im_i = ImV_i[2].((ImV_i)[1])
+
+    orbits = collect(keys(orbits_stabilizers_dict))
+
+    tasks = map(orbits) do vec
+        Threads.@spawn begin
+            partial_orbit_stab_dict = Dict{elem_type(W), Vector{FqMatrix}}()
+            lift = preimage(f_i, vec) # preimage in V/V_{i+1}
+            coset = Set{elem_type(W)}(lift + v for v in Im_i)
+            action_dict = action_dictionary(orbits_stabilizers_dict[vec],(W,q), poly, inv_poly, x)
+
+            while !isempty(coset)
+                vec_lift=pop!(coset)
+                
+                stab_vec_lift = orbit_stabilizer_pruning_optimized!(coset, orbits_stabilizers_dict[vec], vec_lift, action_dict)
+                partial_orbit_stab_dict[vec_lift] = stab_vec_lift
+            end
+            return partial_orbit_stab_dict
+        end
+    end
+
+    for t in tasks
+        merge!(new_orbits_stab_dict, fetch(t))
+    end
+
+    return new_orbits_stab_dict
+end
+
+# A final function that returns a set of polynomials, rather than vectors.
+function final_lift_orbit_reps(x, ImV_i, poly, inv_poly, q, f_i, orbits_and_stabilizers, size)
+    # W_i=V/V_i, f_i = V/V_{i+1}-> V/V_i, pi = V->W_i 
+    # inc and inv_inc go between V and R_d = homogeneous_component of degree d
+    # orbits = set in V/V_i
+
+    W=domain(f_i)
+
+    final_orbits = Set{FqMPolyRingElem}()
+    sizehint!(final_orbits, size)
+
+    Im_i = ImV_i[2].((ImV_i)[1])
+
+    orbits = collect(keys(orbits_and_stabilizers))
+
+    tasks = map(orbits) do vec
+        Threads.@spawn begin
+            partial_orbit = Set{FqMPolyRingElem}()
+            lift = preimage(f_i, vec) # preimage in V/V_{i+1}
+            coset = Set(lift + v for v in Im_i)
+            action_dict = action_dictionary(orbits_and_stabilizers[vec], (W,q), poly, inv_poly, x)
+
+            while !isempty(coset)
+                vec_lift=pop!(coset)
+                push!(partial_orbit, forget_grading(poly(vec_lift)))
+                orbit_stabilizer_pruning_optimized!(coset, orbits_and_stabilizers[vec], vec_lift, action_dict)
+            end
+            return partial_orbit
+        end
+    end
+
+    union!(final_orbits, (fetch.(tasks))...)
+    return final_orbits
+end
+
+@doc raw"""
+
+    projective_hypersurface_equivalence_classes_from_filtration(F::FqField, n::Int, d::Int;
+        waring_samples=48, basis_samples=100, verbose=false, interactive=false)
+
+Returns representatives for the set of equivalence classes of nonzero homogeneous polynomials of 
+degree ``d`` in ``n+1`` variables over ``F``, up to linear changes of the variables.
+
+If ``\gcd(\#F-1,d)=1``, then this gives a set of equivalence classes for hypersurfaces of degree ``d``
+in ``\mathbb{P}^n``.
+
+This function first produces a chain of invariant subspaces inside the appropriate space of polynomials,
+and lifts representatives along a sequence of quotients. This part of the algorithm is probabilistic,
+and can affect the duration of the algorithms run-time.
+
+    `waring_samples` sets the number of "samples" of invariant subspaces. Increasing this may produce
+    a chain of invariant subspaces of longer length.
+
+    `basis_samples` sets the number of attempts to initially check whether a subspace is invariant.
+
+    `verbose` provides more information about the stages of the functions runtime.
+
+    `interactive` allows the user to choose a chain manually (from top to bottom, ordered from 1 to the 
+    number of chains returned to the user).
+
+# Example
+```julia-repl
+julia> projective_hypersurface_equivalence_classes_from_filtration(GF(2), 2, 3)
+Set{FqMPolyRingElem} with 21 elements:
+  x0^3 + x0^2*x1 + x0^2*x2 + x0*x1*x2 + x0*x2^2 + x1^3
+  x0^3 + x0^2*x1 + x0^2*x2 + x0*x1^2 + x0*x2^2 + x1^3
+  x0^3 + x0^2*x1 + x0^2*x2 + x0*x1*x2 + x1^3 + x1^2*x2
+  x0^3 + x0^2*x2 + x0*x2^2 + x1^3 + x1^2*x2 + x1*x2^2
+  ⋮
+```
+"""
+function projective_hypersurface_equivalence_classes_from_filtration(F::FqField, n::Int, d::Int;
+    waring_samples=48, basis_samples=100, verbose=false, interactive=false)
+
+    
+    #The Set-Up: Finding a suitable chain of subspaces.
+    head = _chain_constructor(F, n, d; waring_samples, basis_samples, verbose)
+    if interactive == true
+        chains = collect_chains(head)
+        println("Choose a chain to use as filtration:")
+        filtration = chains[parse(Int, readline())]
+    else
+        rel_dim, filtration = _chain_finder(head)
+        # Considering the filtration ordered as V=V_1 > V_2 > V_3 > ... > V_{end-2} > V_{end-1} > 0
+
+        j = 0
+        while length(filtration) == 2 || dim((filtration[end].object)[1]) != 0
+            head = _chain_constructor(F, n, d; waring_samples, basis_samples, verbose)
+            rel_dim, filtration = _chain_finder(head)
+            if verbose == true
+                println("Failed to find a good chain, trying again.")
+            end
+            if j == 10
+                println("Failed to find invariant submodules. Is this module irreducible?")
+                return
+            end
+            j += 1
+        end
+    end
+
+    # Initializing some variables
+    V, poly = head.object
+    R = codomain(poly)
+    x = gens(R)
+    id = identity_map(V)
+    inv_poly = inv(poly)
+
+    if verbose == true
+        println("Found chain with maximal relative dimension = ", rel_dim)
+        println("Beginning orbit collection")
+    end
+
+    quotients = []
+    for i = 1:length(filtration)-2
+        push!(quotients, quo(V, (filtration[end-i].object)[1]))
+        # Storing V/V_{end-i} at index i
+        # So V/V_{end-1} to V/V_2
+    end
+
+    projection_maps = []
+    for i = 1:length(quotients)-1
+        Source_quo, quo_source = quotients[i]
+        Target_quo, quo_target = quotients[i+1]
+
+        gen_images = [quo_target(preimage(quo_source, v)) for v in gens(Source_quo)]
+        pi = ModuleHomomorphism(Source_quo, Target_quo, gen_images)
+        push!(projection_maps, pi)
+        # Storing f_i : V/V_{end-i} ->> V/V_{end-i-1} at index i
+    end
+
+    images = []
+    for i = 2:length(filtration)-2
+        push!(images, image(compose((filtration[end-i].object)[2], quotients[i-1][2])))
+        # Storing V_{end-i}/V_{end-i+1} at index i
+    end
+
+
+    # Starting the actual algorithm
+    if verbose == true
+        println("Starting stage #1 -- finding orbits in V/V_1")
+    end
+
+    G = GL(n + 1, F)
+    GL_gens = [matrix(g) for g in gens(G)]
+    orbits = []
+
+    # Find orbits in V/V_2, add to orbits.
+    W_2, _ = quotients[end]
+    starting_vecs = Set(W_2)
+    action_dict = action_dictionary_parallel(GL_gens, quotients[end], poly, inv_poly, x)
+    orbits_and_stabilizers = Dict{elem_type(W_2), Vector{FqMatrix}}()
+
+    while !isempty(starting_vecs)
+        vec = pop!(starting_vecs)
+        
+        stab_gens = orbit_stabilizer_pruning_optimized!(starting_vecs, GL_gens, vec, action_dict)
+        orbits_and_stabilizers[vec]=stab_gens
+    end
+
+    if verbose == true
+        println("Starting stage #2 -- lifting orbits along chain")
+    end
+
+    step = 1
+    for i in (length(projection_maps)):-1:1
+
+        if verbose == true
+            println("Lifting step: #", step)
+            step+=1
+        end
+
+        ImV_i = images[i]
+        f_i = projection_maps[i]
+        q = quotients[i][2]
+        orbits_and_stabilizers = lift_orbit_reps(x, ImV_i, poly, q, inv_poly, f_i, orbits_and_stabilizers)
+    end
+
+    if verbose == true
+        println("Starting stage #3 -- finding reprsentatives in V")
+    end
+
+    size = Int(orbit_size(normal_forms(F, n), d))
+    pi = quotients[1][2]
+    V_fin = (filtration[end-1].object)
+    poly_reps = final_lift_orbit_reps(x, V_fin, poly, inv_poly, id, pi, orbits_and_stabilizers, size)
+    delete!(poly_reps, forget_grading(R(0)))
+
+    return poly_reps
+end
+
+#####################################################################
+#
+#   Projective equivalence classes maker (using GAP/Oscar stabilizer)
+#
+#####################################################################
+
+
 function action_for_stabilizer(A, v, p, poly, inv_poly, x)
 
     A = matrix(A)
@@ -136,26 +405,6 @@ function action_for_stabilizer(A, v, p, poly, inv_poly, x)
     g = f(y...)
     g_vec = inv_poly(g)
     return p(g_vec)
-end
-
-function action_morphism(A, quotient, poly, inv_poly, x)
-
-    W = quotient[1]
-    pi = quotient[2]
-    k = dim(W)
-
-    action_morphism = Vector{elem_type(W)}()
-    sizehint!(action_morphism, k)
-    for v in gens(W)
-        v_vec = preimage(pi, v)
-        f = poly(v_vec)
-        y = A * x
-        g = f(y...)
-        w_vec = inv_poly(g)
-        w = pi(w_vec)
-        push!(action_morphism, w)
-    end
-    return ModuleHomomorphism(W, W, action_morphism)
 end
 
 function stabilizer_maker(G, orbits, action)
@@ -278,78 +527,7 @@ function final_lift_orbit_representatives(ImV_i, poly, f_i, orbits_and_stabilize
     return final_orbits
 end
 
-function lift_orbit_representatives2(x, ImV_i, poly, q, inv_poly, f_i, orbits_stabilizers_dict)
-    # W_i=V/V_i, f_i = V/V_{i+1}-> V/V_i, pi = V->W_i 
-    # inc and inv_inc go between V and R_d = homogeneous_component of degree d
-    # orbits = set in V/V_i
-
-    W=domain(f_i)
-    new_orbits_stab_dict = Dict{elem_type(W), Vector{FqMatrix}}()
-
-    Im_i = ImV_i[2].((ImV_i)[1])
-
-    orbits = collect(keys(orbits_stabilizers_dict))
-
-    tasks = map(orbits) do vec
-        Threads.@spawn begin
-            partial_orbit_stab_dict = Dict{elem_type(W), Vector{FqMatrix}}()
-            lift = preimage(f_i, vec) # preimage in V/V_{i+1}
-            coset = Set{elem_type(W)}(lift + v for v in Im_i)
-            action_dict = action_dictionary(orbits_stabilizers_dict[vec],(W,q), poly, inv_poly, x)
-
-            while !isempty(coset)
-                vec_lift=pop!(coset)
-                
-                stab_vec_lift = orbit_stabilizer_pruning_optimized!(coset, orbits_stabilizers_dict[vec], vec_lift, action_dict)
-                partial_orbit_stab_dict[vec_lift] = stab_vec_lift
-            end
-            return partial_orbit_stab_dict
-        end
-    end
-
-    for t in tasks
-        merge!(new_orbits_stab_dict, fetch(t))
-    end
-
-    return new_orbits_stab_dict
-end
-
-function final_lift_orbit_representatives2(x, ImV_i, poly, inv_poly, q, f_i, orbits_and_stabilizers, size)
-    # W_i=V/V_i, f_i = V/V_{i+1}-> V/V_i, pi = V->W_i 
-    # inc and inv_inc go between V and R_d = homogeneous_component of degree d
-    # orbits = set in V/V_i
-
-    W=domain(f_i)
-
-    final_orbits = Set{FqMPolyRingElem}()
-    sizehint!(final_orbits, size)
-
-    Im_i = ImV_i[2].((ImV_i)[1])
-
-    orbits = collect(keys(orbits_and_stabilizers))
-
-    tasks = map(orbits) do vec
-        Threads.@spawn begin
-            partial_orbit = Set{FqMPolyRingElem}()
-            lift = preimage(f_i, vec) # preimage in V/V_{i+1}
-            coset = Set(lift + v for v in Im_i)
-            action_dict = action_dictionary(orbits_and_stabilizers[vec], (W,q), poly, inv_poly, x)
-
-            while !isempty(coset)
-                vec_lift=pop!(coset)
-                push!(partial_orbit, forget_grading(poly(vec_lift)))
-                orbit_stabilizer_pruning_optimized!(coset, orbits_and_stabilizers[vec], vec_lift, action_dict)
-            end
-            return partial_orbit
-        end
-    end
-
-    union!(final_orbits, (fetch.(tasks))...)
-    return final_orbits
-end
-
-
-function projective_hypersurface_equivalence_classes_from_filtration(F, n, d; waring_samples=48, basis_samples=100, verbose=false, interactive=false)
+function projective_hypersurface_equivalence_classes_from_filtration_GAP(F, n, d; waring_samples=48, basis_samples=100, verbose=false, interactive=false)
 
 
     head = _chain_constructor(F, n, d; waring_samples, basis_samples, verbose)
@@ -530,124 +708,6 @@ function projective_hypersurface_equivalence_classes_from_filtration(F, n, d; wa
     pi = quotients[1][2]
     V_fin = (filtration[end-1].object)
     poly_reps = final_lift_orbit_representatives(V_fin, poly, id, orbits_and_stabilizers, size)
-    delete!(poly_reps, forget_grading(R(0)))
-
-    return poly_reps
-end
-
-
-
-
-function projective_hypersurface_equivalence_classes_from_filtration2(F, n, d; waring_samples=48, basis_samples=100, verbose=false, interactive=false)
-
-
-    head = _chain_constructor(F, n, d; waring_samples, basis_samples, verbose)
-    if interactive == true
-        chains = collect_chains(head)
-        println("Choose a chain to use as filtration:")
-        filtration = chains[parse(Int, readline())]
-    else
-        rel_dim, filtration = _chain_finder(head)
-        # Considering the filtration ordered as V=V_1 > V_2 > V_3 > ... > V_{end-2} > V_{end-1} > 0
-
-        j = 0
-        while length(filtration) == 2 || dim((filtration[end].object)[1]) != 0
-            head = _chain_constructor(F, n, d; waring_samples, basis_samples, verbose)
-            rel_dim, filtration = _chain_finder(head)
-            if verbose == true
-                println("Failed to find a good chain, trying again.")
-            end
-            if j == 10
-                println("Failed to find invariant submodules. Is this module irreducible?")
-                return
-            end
-            j += 1
-        end
-    end
-
-    V, poly = head.object
-    R = codomain(poly)
-    x = gens(R)
-    id = identity_map(V)
-    inv_poly = inv(poly)
-
-    if verbose == true
-        println("Found chain with maximal relative dimension = ", rel_dim)
-        println("Beginning orbit collection")
-    end
-
-    quotients = []
-    for i = 1:length(filtration)-2
-        push!(quotients, quo(V, (filtration[end-i].object)[1]))
-        # Storing V/V_{end-i} at index i
-        # So V/V_{end-1} to V/V_2
-    end
-
-    projection_maps = []
-    for i = 1:length(quotients)-1
-        Source_quo, quo_source = quotients[i]
-        Target_quo, quo_target = quotients[i+1]
-
-        gen_images = [quo_target(preimage(quo_source, v)) for v in gens(Source_quo)]
-        pi = ModuleHomomorphism(Source_quo, Target_quo, gen_images)
-        push!(projection_maps, pi)
-        # Storing f_i : V/V_{end-i} ->> V/V_{end-i-1} at index i
-    end
-
-    images = []
-    for i = 2:length(filtration)-2
-        push!(images, image(compose((filtration[end-i].object)[2], quotients[i-1][2])))
-        # Storing V_{end-i}/V_{end-i+1} at index i
-    end
-
-
-    if verbose == true
-        println("Starting stage #1 -- finding orbits in V/V_1")
-    end
-
-    G = GL(n + 1, F)
-    GL_gens = [matrix(g) for g in gens(G)]
-    orbits = []
-
-    # Find orbits in V/V_2, add to orbits.
-    W_2, _ = quotients[end]
-    starting_vecs = Set(W_2)
-    action_dict = action_dictionary_parallel(GL_gens, quotients[end], poly, inv_poly, x)
-    orbits_and_stabilizers = Dict{elem_type(W_2), Vector{FqMatrix}}()
-
-    while !isempty(starting_vecs)
-        vec = pop!(starting_vecs)
-        
-        stab_gens = orbit_stabilizer_pruning_optimized!(starting_vecs, GL_gens, vec, action_dict)
-        orbits_and_stabilizers[vec]=stab_gens
-    end
-
-    if verbose == true
-        println("Starting stage #2 -- lifting orbits along chain")
-    end
-
-    step = 1
-    for i in (length(projection_maps)):-1:1
-
-        if verbose == true
-            println("Lifting step: #", step)
-            step+=1
-        end
-
-        ImV_i = images[i]
-        f_i = projection_maps[i]
-        q = quotients[i][2]
-        orbits_and_stabilizers = lift_orbit_representatives2(x, ImV_i, poly, q, inv_poly, f_i, orbits_and_stabilizers)
-    end
-
-    if verbose == true
-        println("Starting stage #3 -- finding reprsentatives in V")
-    end
-
-    size = Int(orbit_size(normal_forms(F, n), d))
-    pi = quotients[1][2]
-    V_fin = (filtration[end-1].object)
-    poly_reps = final_lift_orbit_representatives2(x, V_fin, poly, inv_poly, id, pi, orbits_and_stabilizers, size)
     delete!(poly_reps, forget_grading(R(0)))
 
     return poly_reps

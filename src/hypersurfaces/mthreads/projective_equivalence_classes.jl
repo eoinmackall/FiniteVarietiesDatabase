@@ -291,17 +291,27 @@ end
 
 
 @doc raw"""
-projective_hypersurface_equivalence_classes(F::FqField, n::Int, d::Int; cached::Bool=false)
+
+    projective_hypersurface_equivalence_classes(F::FqField, n::Int, d::Int; cached::Bool=false)
 
 Produces a set of polynomial representatives for projective equivalence
-classes of hypersurfaces of degree d in ``\mathbb{P}^n`` over a finite field
-of p^r elements.
+classes of hypersurfaces of degree ``d`` in ``\mathbb{P}^n`` over a finite field ``F``.
 
 Uses multithreaded union-find method. Can be interrupted for a partial set.
 
-Setting cached=true will preallocate a vector of representatives for ``\mathbb{P}(V)``
-where ``V`` is the vector space of homogeneous polynomials of degree d in n+1 variables.
-This is a faster method, but can easily cause the system to run out of memory.
+Setting `cached = true` will preallocate a vector of representatives for ``\mathbb{P}(V)``
+where ``V`` is the vector space of homogeneous polynomials of degree ``d`` in ``n+1`` variables.
+This is faster than the alternative, but can easily cause the system to run out of memory.
+
+# Example
+```julia-repl
+julia> projective_hypersurface_equivalence_classes(GF(2), 2, 2)
+Set{FqMPolyRingElem} with 4 elements:
+  x0^2 + x0*x2 + x1^2
+  x0^2 + x0*x1 + x1^2
+  x0^2 + x0*x1
+  x0^2
+```
 """
 function projective_hypersurface_equivalence_classes(F::FqField, n::Int, d::Int; cached::Bool=false, verbose::Bool=false)
 
