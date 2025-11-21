@@ -4,8 +4,15 @@
 #
 #####################################################################
 
-#TODO: add explanation of this code, and the differences between
-#this and mthreads
+# Warning: this could should not be used. At the moment, it will fail
+# (probably by a seg-fault).
+#
+# This code was a first attempt at changing some of the functions
+# for finding hypersurface representatives to work distributed-ively.
+# However, I'm not sure if there is functionality for passing Oscar
+# objects to remote processes. This could potentially be bypassed
+# by converting to elementary types, but I don't know if I'll come
+# back to this for a bit.
 
 #####################################################################
 #
