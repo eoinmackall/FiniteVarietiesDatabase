@@ -7,4 +7,4 @@ functionality.
 
 ## Functionality
 
-- Currently, this project provides functionality for computing a set of class representatives for projective equivalence of hypersurfaces in projective space over a finite field.
+- Currently, this project provides functionality for computing a set of class representatives for equivalence classes of hypersurfaces in projective space over a finite field under projective equivalence.
