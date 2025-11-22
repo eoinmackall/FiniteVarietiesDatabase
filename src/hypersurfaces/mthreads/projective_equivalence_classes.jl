@@ -185,11 +185,12 @@ function Base.iterate(coeffs::ProjectiveCoefficients, state)
 end
 
 """
-enumerate_matrix(F::FqField, n::Int, i::Int)
+    enumerate_matrix(F::FqField, n::Int, i::Int)
 
 Inputs: finite field F, integer n>0, integer i>=0.
 Outputs: nxn matrix with coefficients in F gotten by writing
-the integer i in base-q where q is the size of F.
+the integer i in base-q where q is the size of F, and replacing
+digits with the corresponding element of F.
 """
 function enumerate_matrix(F::FqField, n::Int, i::Int)
 
@@ -208,7 +209,7 @@ function enumerate_matrix(F::FqField, n::Int, i::Int)
 end
 
 """
-is_projective_rep(F::FqField, v::Vector{FqFieldElem})
+    is_projective_rep(F::FqField, v::Vector{FqFieldElem})
 
 Takes a nonzero vector with coefficients in the field F.
 Checks if the leading nonzero coefficient is 1.
@@ -222,7 +223,7 @@ function is_projective_rep(F::FqField, v::Vector{FqFieldElem})
 end
 
 @doc raw"""
-is_PGL_rep(A::FqMatrix)
+    is_PGL_rep(A::FqMatrix)
 
 Takes a square ``n\times n`` matrix and checks if both the determinant
 is nonzero and the first nonzero entry of the first column, going from
