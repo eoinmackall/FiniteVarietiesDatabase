@@ -14,8 +14,8 @@
 # Burnside's theorem for counting orbits. This is explained in both
 # (https://arxiv.org/abs/1511.06945, see equation (3.1)) and in
 # (https://arxiv.org/abs/2306.09908, see equation (1)) although, note
-# that both papers have a typo in their formulae (since the size |C| of
-# a conjugacy class of G clearly depends on the class C).
+# that both papers have a typo in their formulae -- |C| should be |c|
+# and it should be inside the sum.
 
 #####################################################################
 #
