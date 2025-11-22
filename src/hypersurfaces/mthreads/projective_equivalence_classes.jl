@@ -1,3 +1,22 @@
+#####################################################################
+#
+#   Projective equivalence classes (union-find method)
+#
+#####################################################################
+
+# In this file you'll find a function for constructing a set of representatives
+# for projective equivalence classes of hypersurfaces of degree d in ``\mathbb{P}^n``
+# over a finite field F.
+#
+# The main function in this file is called projective_hypersurface_equivalence_classes(...)
+# and it has a couple of variants (single threaded, multithreaded, preallocating and not).
+# The driver behind this function is the "union-find" method, i.e. this function runs
+# a brute force exhaustive search for equivalence classes over the set of all hypersurfaces.
+#
+# Unlike the function projective_hypersurface_equivalence_classes_from_filtration(...),
+# that can also be found in this directory, the function in this file produces the
+# correct result regardless of the size of F. As a caveat, the function here is often
+# much slower for values of n,d >= 3.
 
 #####################################################################
 #
@@ -89,7 +108,7 @@ function homogeneous_monomial_basis(S::MPolyRing, d::Int)
     x = gens(S)
     n = length(x)
 
-    monomial_basis = []
+    monomial_basis = Vector{elem_type(S)}()
     for v in HomogeneousExponents(n, d)
         f = S(0)
         f = setcoeff!(f, v, 1)
@@ -108,12 +127,13 @@ end
 struct ProjectiveCoefficients
     F::FqField
     n::Int
+    enum::Vector{FqFieldElem}
 
     function ProjectiveCoefficients(F::FqField, n::Int)
         if n <= 1
             throw(ArgumentError("n should be the dimension of some projective space of positive dimension"))
         end
-        new(F, n)
+        new(F, n, collect(F))
     end
 end
 
@@ -130,12 +150,12 @@ function Base.length(coeffs::ProjectiveCoefficients)
 end
 
 function Base.eltype(::Type{ProjectiveCoefficients})
-    return Vector{Int}
+    return Vector{FqFieldElem}
 end
 
 function Base.iterate(coeffs::ProjectiveCoefficients)
-    coeffs_init = zeros(Int, coeffs.n + 1)
-    coeffs_init[1] = 1
+    coeffs_init = zeros(coeffs.F, coeffs.n + 1)
+    coeffs_init[1] = coeffs.F(1)
     return (coeffs_init, (1, 0))
 end
 
@@ -148,16 +168,17 @@ function Base.iterate(coeffs::ProjectiveCoefficients, state)
     if k > n
         return nothing
     elseif counter == q^(n + 1 - k) - 1
-        coeffs_vec = zeros(Int, n + 1)
-        coeffs_vec[k+1] = 1
+        coeffs_vec = zeros(coeffs.F, n + 1)
+        coeffs_vec[k+1] = coeffs.F(1)
         return (coeffs_vec, (k + 1, 0))
     else
         counter += 1
-        coeffs_vec = zeros(Int, n + 1)
-        coeffs_vec[k] = 1
+        coeffs_vec = zeros(coeffs.F, n + 1)
+        coeffs_vec[k] = coeffs.F(1)
         temp_counter = counter
         for i = 1:n+1-k
-            temp_counter, coeffs_vec[k+i] = divrem(temp_counter, q)
+            temp_counter, val =divrem(temp_counter, q)
+            coeffs_vec[k+i] = coeffs.enum[val+1]
         end
         return (coeffs_vec, (k, counter))
     end
@@ -173,15 +194,16 @@ the integer i in base-q where q is the size of F.
 function enumerate_matrix(F::FqField, n::Int, i::Int)
 
     q = order(F)
-    A = Matrix{Int}(undef, n, n)
+    A = zero_matrix(F, n, n)
+    enum = collect(F)
 
     quo = i
     for j = 1:n
         for k = 1:n
-            quo, A[j, k] = divrem(quo, q)
+            quo, val = divrem(quo, q)
+            A[j, k] = enum[val+1]
         end
     end
-    A = matrix(F, A)
     return A
 end
 
@@ -292,16 +314,20 @@ end
 
 @doc raw"""
 
-    projective_hypersurface_equivalence_classes(F::FqField, n::Int, d::Int; cached::Bool=false)
+    projective_hypersurface_equivalence_classes(F::FqField, n::Int, d::Int; thraded::Bool=false, allocate::Bool=false, verbose::Bool=false)
 
 Produces a set of polynomial representatives for projective equivalence
-classes of hypersurfaces of degree ``d`` in ``\mathbb{P}^n`` over a finite field ``F``.
+classes of hypersurfaces of degree ``d`` in ``\mathbb{P}^n`` over a finite field ``F``
+using a union-find algorithm.
 
-Uses multithreaded union-find method. Can be interrupted for a partial set.
+Can be interrupted for a partial set.
 
-Setting `cached = true` will preallocate a vector of representatives for ``\mathbb{P}(V)``
-where ``V`` is the vector space of homogeneous polynomials of degree ``d`` in ``n+1`` variables.
-This is faster than the alternative, but can easily cause the system to run out of memory.
+Setting `threaded = true` will run a multithreaded algorithm, provided julia is currently using
+multiple threads (e.g. by starting julia with "julia --threads=b" for b>1).
+
+Setting `allocate = false` will populate a list with elements of PGL and run an algorithm that
+iterates over these group elements instead of over all representatives of homogeneous polynomials. 
+This is typically slower than the alternatives but requires less up-front memory.
 
 # Example
 ```julia-repl
@@ -313,53 +339,120 @@ Set{FqMPolyRingElem} with 4 elements:
   x0^2
 ```
 """
-function projective_hypersurface_equivalence_classes(F::FqField, n::Int, d::Int; cached::Bool=false, verbose::Bool=false)
+function projective_hypersurface_equivalence_classes(F::FqField, n::Int, d::Int; threaded::Bool=false, allocate::Bool=true, verbose::Bool=false)
 
-    if cached
-        return _projective_hypersurface_equivalence_classes1(F, n, d; verbose)
+    if threaded == true
+        if allocate == true
+            return _projective_hypersurface_equivalence_classes1(F,n,d;verbose)
+        else
+            return _projective_hypersurface_equivalence_classes2(F,n,d;verbose)
+        end
     else
-        return _projective_hypersurface_equivalence_classes2(F, n, d; verbose)
+        if allocate == true
+            return _projective_hypersurface_equivalence_classes0(F,n,d)
+        else
+            return _projective_hypersurface_equivalence_classes2(F,n,d;verbose)
+        end
+    end
+end
+
+function _projective_hypersurface_equivalence_classes0(F::FqField, n::Int, d::Int)
+
+    R, _ = graded_polynomial_ring(F, ["x$i" for i =0:n])
+    H, poly = homogeneous_component(R, d)
+
+    G=GL(n+1,F)
+    GL_gens = [matrix(F,symmetric_representation(matrix(g), d)) for g in gens(G)]
+
+    coeffs = Set([H(vec).v for vec in ProjectiveCoefficients(F,dim(H)-1)])
+
+    eq_class_reps = Set{FqMPolyRingElem}()
+    temp = zero_matrix(F, 1, dim(H))
+    try
+        while !isempty(coeffs)
+            vec=pop!(coeffs)
+            push!(eq_class_reps, forget_grading(poly(H(vec))))
+            orbit_queue = Set([vec])
+            while !isempty(orbit_queue)
+                queue_vec = pop!(orbit_queue)
+                for g in GL_gens
+                    mul!(temp, queue_vec, g)
+                    j=findfirst(!iszero, temp)
+                    c=temp[j]
+                    if c != F(1)
+                        temp .*= inv(c)
+                    end
+                    if (temp in coeffs)
+                        delete!(coeffs, temp)
+                        push!(orbit_queue, deepcopy(temp))
+                    end
+                end
+            end
+        end
+     catch err
+        if err isa InterruptException
+            println("Terminating computation early")
+        else
+            rethrow(err)
+        end
+    finally
+        return eq_class_reps
     end
 end
 
 function _projective_hypersurface_equivalence_classes1(F::FqField, n::Int, d::Int; verbose::Bool=false)
+    
+    R, _ = graded_polynomial_ring(F, ["x$i" for i = 0:n])
+    H, poly = homogeneous_component(R, d)
 
-    #Set-up
-    q=Int(order(F))
-    R, _ = polynomial_ring(F, ["x$i" for i = 0:n])
-    monomial_basis = homogeneous_monomial_basis(R, d)
-
-    if verbose == true
-        println("Beginning memory allocation")
-    end
-    #Create an iterator for representatives of nonzero homogeneous degree d polynomials over F
-    homogeneous_polynomials_iterator = (sum(c * m for (c, m) in zip(coeffs, monomial_basis))
-                                        for coeffs in ProjectiveCoefficients(F, binomial(n + d, d) - 1))
-    homogeneous_polynomials = Set{FqMPolyRingElem}()
-    sizehint!(homogeneous_polynomials, q^(binomial(n + d, d) - 1))
-    union!(homogeneous_polynomials, homogeneous_polynomials_iterator)
-    if verbose == true
-        println("Polynomials built")
-    end
-
-    #Create an itertator for representatives of PGL_(n+1)
-    PGL_vec = PGL(n + 1, F)
-    PGL_chunks = Iterators.partition(PGL_vec, cld(length(PGL_vec), nthreads()))
-
-    if verbose == true
-        println("Starting collection process")
-    end
-
-    representatives = Set{FqMPolyRingElem}()
+    G = GL(n+1, F)
+    GL_gens = [matrix(F,symmetric_representation(matrix(g), d)) for g in gens(G)]
+    
+    coeffs = Set([H(vec).v for vec in ProjectiveCoefficients(F, dim(H)-1)])
+    
+    eq_class_reps = Set{FqMPolyRingElem}()
     try
-        while !isempty(homogeneous_polynomials)
-            f = first(homogeneous_polynomials)
-            push!(representatives, f)
-            tasks = map(PGL_chunks) do chunk
-                Threads.@spawn _add_to_equiv_class(chunk, R, f)
+        while !isempty(coeffs)
+            seed = pop!(coeffs)
+            push!(eq_class_reps, forget_grading(poly(H(seed))))
+            
+            frontier = [seed]
+            
+            while !isempty(frontier)
+                
+                next_wave_chunks = Vector{Vector{FqMatrix}}(undef, length(frontier))
+                
+                Threads.@threads for i in 1:length(frontier)
+                    current_vec = frontier[i]
+                    local_candidates = Vector{FqMatrix}()
+                    
+                    temp = zero_matrix(F, 1, dim(H))
+                    
+                    for g in GL_gens
+                        mul!(temp, current_vec, g)
+                        
+                        ind = findfirst(!iszero, temp)
+                        c = temp[ind]
+                        if c != F(1)
+                            temp .*= inv(c)
+                        end
+                        
+                        push!(local_candidates, deepcopy(temp))
+                    end
+                    next_wave_chunks[i] = local_candidates
+                end
+                
+                resize!(frontier, 0) 
+                
+                for chunk in next_wave_chunks
+                    for candidate in chunk
+                        if candidate in coeffs
+                            delete!(coeffs, candidate)
+                            push!(frontier, candidate)
+                        end
+                    end
+                end
             end
-            partial_equiv_classes = fetch.(tasks)
-            setdiff!(homogeneous_polynomials, partial_equiv_classes...)
         end
     catch err
         if err isa InterruptException
@@ -368,7 +461,7 @@ function _projective_hypersurface_equivalence_classes1(F::FqField, n::Int, d::In
             rethrow(err)
         end
     finally
-        return representatives
+        return eq_class_reps
     end
 end
 

@@ -1,3 +1,21 @@
+#####################################################################
+#
+#   Finding the size of the set of representatives for hypersurfaces
+#
+#####################################################################
+
+# This file contains functionality that allows for computing the size
+# of the set of nonzero homogeneous polynomials of degree d in n+1 variables
+# with coefficients in a finite field F, up to a linear change in the variables.
+# When gcd(#F-1, d)=1, this agrees with the set of equivalence classes
+# of hypersurfaces of degree d in ``\mathbb{P}^n``.
+#
+# The method for computing the size of the set of representatives uses
+# Burnside's theorem for counting orbits. This is explained in both
+# (https://arxiv.org/abs/1511.06945, see equation (3.1)) and in
+# (https://arxiv.org/abs/2306.09908, see equation (1)) although, note
+# that both papers have a typo in their formulae (since the size |C| of
+# a conjugacy class of G clearly depends on the class C).
 
 #####################################################################
 #
@@ -7,7 +25,7 @@
 
 
 """
-symmetric_representation(A::FqMatrix, d::Int)
+    symmetric_representation(A::FqMatrix, d::Int)
 
 Input: an nxn-matrix A with n>0 and entries in a field F; an integer d>0.
 Output: the matrix corresponding to the symmetric representation of A of
@@ -43,7 +61,7 @@ function symmetric_representation(A::FqMatrix, d::Int)
 end
 
 """
-normal_forms(F::FqField, n::Int)
+    normal_forms(F::FqField, n::Int)
 
 Reutrns a dictionary with keys a representative of each conjugacy class
 of GL(n+1,F) and with values the size of the corresponding class.
@@ -89,20 +107,21 @@ end
 
 
 @doc raw"""
-orbit_size(normal_forms::Dict{FqMatrix,BigInt}, d::Int})
+
+    hypersurface_rep_size(normal_forms::Dict{FqMatrix,BigInt}, d::Int})
 
 Inputs: a dictionary with keys a reprsentative of a given conjugacy class,
-and with values the size of the conjugacy class, from GL(n+1,p^r), and an
+and with values the size of the conjugacy class, from GL(n+1,q), and an
 integer d>0.
 
-Outputs: the number of nonzero orbits of GL(n+1,p^r) on the dth symmetric
-power of the canonical n+1 vector space that GL(n+1,p^r) acts on.
+Outputs: the number of nonzero orbits of GL(n+1,q) on the dth symmetric
+power of the canonical n+1 vector space that GL(n+1,q) acts on.
 
-If every element of GF(p^r) is a dth power, e.g. if gcd(p^r-1,d)=1, then
+If every element of GF(q) is a dth power, e.g. if gcd(q-1,d)=1, then
 this is the number of projective equivalence classes of hypersurfaces of
-degree d in ``\mathbb{P}^n`` over GF(p^r).
+degree d in ``\mathbb{P}^n`` over GF(q).
 """
-function orbit_size(normal_forms::Dict{FqMatrix,BigInt}, d::Int)
+function hypersurface_rep_size(normal_forms::Dict{FqMatrix,BigInt}, d::Int)
 
     F = base_ring(first(keys(normal_forms)))
     q = order(F)

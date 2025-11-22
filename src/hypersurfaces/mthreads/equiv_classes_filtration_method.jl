@@ -469,7 +469,7 @@ function projective_hypersurface_equivalence_classes_from_filtration(F::FqField,
         println("Starting stage #3 -- finding representatives in V")
     end
 
-    size = Int(orbit_size(normal_forms(F, n), d))
+    size = Int(hypersurface_rep_size(normal_forms(F, n), d))
     pi = quotients[1][2]
     V_fin = (filtration[end-1].object)
     poly_reps = final_lift_orbit_reps(x, V_fin, poly, inv_poly, id, pi, orbits_and_stabilizers, size)
@@ -794,7 +794,7 @@ function projective_hypersurface_equivalence_classes_from_filtration_GAP(F, n, d
         println("Starting stage #3 -- finding reprsentatives in V")
     end
 
-    size = Int(orbit_size(normal_forms(F, n), d))
+    size = Int(hypersurface_rep_size(normal_forms(F, n), d))
     pi = quotients[1][2]
     V_fin = (filtration[end-1].object)
     poly_reps = final_lift_orbit_representatives(V_fin, poly, id, orbits_and_stabilizers, size)

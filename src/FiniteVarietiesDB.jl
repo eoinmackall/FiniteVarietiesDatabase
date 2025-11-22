@@ -17,10 +17,9 @@ export collect_chains
 
 export homogeneous_monomial_basis
 export HomogeneousExponents
+export hypersurface_rep_size
 export normal_forms
-export orbit_size
 export orbit_stabilizer
-export PGL
 export projective_hypersurface_equivalence_classes
 export projective_hypersurface_equivalence_classes_from_filtration
 export ProjectiveCoefficients
