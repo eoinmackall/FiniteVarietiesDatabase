@@ -101,20 +101,36 @@ function _chain_finder(head::DChainNode)
 
     d = dim(head.object[1])
     good_chain = chains[1]
+    index = 0
     for chain in chains
         temp_d = 0
+        temp_index = 0
         for i = 1:(length(chain)-1)
-            temp_d = max(temp_d, dim((chain[i].object)[1]) - dim((chain[i+1].object)[1]))
-        end
+            rel_d = dim((chain[i].object)[1]) - dim((chain[i+1].object)[1]))
+            if temp_d>rel_d
+                continue
+            else
+                temp_d=rel_d
+                temp_index=i
+            end
+        end    
         if dim((chain[end].object)[1]) != 0
-            temp_d = max(temp_d, dim((chain[end].object)[1]))
+            rel_d = dim((chain[end].object)[1]))
+            if temp_d<rel_d
+                temp_d=rel_d
+                temp_index=length(chain)
+            end
         end
         if temp_d < d
             d = temp_d
             good_chain = chain
         end
         if temp_d == d
-            good_chain = length(chain) > length(good_chain) ? chain : good_chain
+            if length(chain) > length(good_chain)
+                good_chain = chain
+            elseif temp_index<index
+                good_chain = chain
+            end          
         end
     end
     return (d, good_chain)
@@ -199,7 +215,7 @@ function _is_GL_invariant(X, Y, x, W, sub_map, inc, inv_inc)
     return true
 end
 
-function _chain_constructor(F, n, d; waring_samples=48, basis_samples=100, verbose=false)
+function _chain_constructor(F, n, d; waring_samples=240, basis_samples=100, verbose=false)
 
     q = order(F)
     R, x = graded_polynomial_ring(F, ["x$i" for i = 0:n])

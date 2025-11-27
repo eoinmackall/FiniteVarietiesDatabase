@@ -347,7 +347,7 @@ Set{FqMPolyRingElem} with 21 elements:
 ```
 """
 function projective_hypersurface_equivalence_classes_from_filtration(F::FqField, n::Int, d::Int;
-    waring_samples=48, basis_samples=100, verbose=false, interactive=false)
+    waring_samples=240, basis_samples=100, verbose=false, interactive=false)
 
     
     #The Set-Up: Finding a suitable chain of subspaces.
