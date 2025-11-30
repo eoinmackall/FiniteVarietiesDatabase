@@ -101,12 +101,13 @@ function _chain_finder(head::DChainNode)
 
     d = dim(head.object[1])
     good_chain = chains[1]
-    index = 0
-    for chain in chains
+    index = Inf
+    chain_pos = 1
+    for (pos, chain) in enumerate(chains)
         temp_d = 0
-        temp_index = 0
+        temp_index = length(chain)
         for i = 1:(length(chain)-1)
-            rel_d = dim((chain[i].object)[1]) - dim((chain[i+1].object)[1]))
+            rel_d = dim((chain[i].object)[1]) - dim((chain[i+1].object)[1])
             if temp_d>rel_d
                 continue
             else
@@ -115,7 +116,7 @@ function _chain_finder(head::DChainNode)
             end
         end    
         if dim((chain[end].object)[1]) != 0
-            rel_d = dim((chain[end].object)[1]))
+            rel_d = dim((chain[end].object)[1])
             if temp_d<rel_d
                 temp_d=rel_d
                 temp_index=length(chain)
@@ -124,16 +125,20 @@ function _chain_finder(head::DChainNode)
         if temp_d < d
             d = temp_d
             good_chain = chain
+            chain_pos = pos
         end
         if temp_d == d
             if length(chain) > length(good_chain)
                 good_chain = chain
-            elseif temp_index<index
+                chain_pos = pos
+            elseif (length(chain) == length(good_chain) && temp_index<index)
                 good_chain = chain
+                chain_pos = pos
+                index = temp_index
             end          
         end
     end
-    return (d, good_chain)
+    return (d, chain_pos, good_chain)
 end
 
 function _polynomial_sampler(components, num_samples)

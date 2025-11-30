@@ -350,6 +350,10 @@ function projective_hypersurface_equivalence_classes_from_filtration(F::FqField,
     waring_samples=240, basis_samples=100, verbose=false, interactive=false)
 
     
+    if verbose == true
+        println("Starting chain collection...")
+    end
+
     #The Set-Up: Finding a suitable chain of subspaces.
     head = _chain_constructor(F, n, d; waring_samples, basis_samples, verbose)
     if interactive == true
@@ -357,13 +361,13 @@ function projective_hypersurface_equivalence_classes_from_filtration(F::FqField,
         println("Choose a chain to use as filtration:")
         filtration = chains[parse(Int, readline())]
     else
-        rel_dim, filtration = _chain_finder(head)
+        rel_dim, position, filtration = _chain_finder(head)
         # Considering the filtration ordered as V=V_1 > V_2 > V_3 > ... > V_{end-2} > V_{end-1} > 0
 
         j = 0
         while length(filtration) == 2 || dim((filtration[end].object)[1]) != 0
             head = _chain_constructor(F, n, d; waring_samples, basis_samples, verbose)
-            rel_dim, filtration = _chain_finder(head)
+            rel_dim, position, filtration = _chain_finder(head)
             if verbose == true
                 println("Failed to find a good chain, trying again.")
             end
@@ -384,7 +388,7 @@ function projective_hypersurface_equivalence_classes_from_filtration(F::FqField,
 
     if verbose == true
         if interactive == false
-            println("Found chain with maximal relative dimension = ", rel_dim)
+            println("Found chain at position #", position, " with maximal relative dimension = ", rel_dim)
         end
         println("Beginning orbit collection")
     end
@@ -624,13 +628,13 @@ function projective_hypersurface_equivalence_classes_from_filtration_GAP(F, n, d
         println("Choose a chain to use as filtration:")
         filtration = chains[parse(Int, readline())]
     else
-        rel_dim, filtration = _chain_finder(head)
+        rel_dim, position, filtration = _chain_finder(head)
         # Considering the filtration ordered as V=V_1 > V_2 > V_3 > ... > V_{end-2} > V_{end-1} > 0
 
         j = 0
         while length(filtration) == 2 || dim((filtration[end].object)[1]) != 0
             head = _chain_constructor(F, n, d; waring_samples, basis_samples, verbose)
-            rel_dim, filtration = _chain_finder(head)
+            rel_dim, position, filtration = _chain_finder(head)
             if verbose == true
                 println("Failed to find a good chain, trying again.")
             end
