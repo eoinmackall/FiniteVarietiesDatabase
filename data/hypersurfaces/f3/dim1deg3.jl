@@ -11,12 +11,12 @@ using FiniteVarietiesDB
 using Oscar
 
 F=GF(3)
-classes=[string(f) for f in projective_hypersurface_equivalence_classes(F, 2, 2)]
+classes=[string(f) for f in projective_hypersurface_equivalence_classes_from_filtration(F, 2, 3)]
 df=DataFrame(
     field = 3,
     polynomial = classes,
     dimension = 1,
-    degree = 2
+    degree = 3
 )
 
 hypersurfaces_path = joinpath(@__DIR__, "..", "hypersurfaces.db")

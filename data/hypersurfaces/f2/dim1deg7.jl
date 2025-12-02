@@ -1,5 +1,3 @@
-# Completed
-
 using Pkg
 Pkg.activate(joinpath(@__DIR__, "../../.."))
 
@@ -10,13 +8,13 @@ using DBInterface
 using FiniteVarietiesDB
 using Oscar
 
-F=GF(3)
-classes=[string(f) for f in projective_hypersurface_equivalence_classes(F, 2, 2)]
+F=GF(2)
+classes=[string(f) for f in projective_hypersurface_equivalence_classes_from_filtration(F, 2, 7, verbose=true)]
 df=DataFrame(
-    field = 3,
+    field = 2,
     polynomial = classes,
     dimension = 1,
-    degree = 2
+    degree = 7
 )
 
 hypersurfaces_path = joinpath(@__DIR__, "..", "hypersurfaces.db")
