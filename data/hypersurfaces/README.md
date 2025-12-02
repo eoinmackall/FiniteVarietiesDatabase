@@ -6,8 +6,6 @@ The following tables show what equivalence classes of hypersurfaces are included
 
 ---
 
-<center>
-
 **GF(2)**
 | dim/deg| 2 | 3 | 4 | 5 | 6 | 7 |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -16,11 +14,7 @@ The following tables show what equivalence classes of hypersurfaces are included
 | 3 |  |  |  |  |  |  |
 | 4 |  |  |  |  |  |  |
 
-</center>
-
 ---
-
-<center>
 
 **GF(3)**
 | dim/deg| 2 | 3 | 4 | 5 | 6 | 7 |
@@ -29,11 +23,8 @@ The following tables show what equivalence classes of hypersurfaces are included
 | 2 |  |  |  |  |  |  |
 | 3 |  |  |  |  |  |  |
 | 4 |  |  |  |  |  |  |
-</center>
 
 ---
-
-<center>
 
 **GF(5)**
 | dim/deg| 2 | 3 | 4 | 5 | 6 | 7 |
@@ -42,8 +33,6 @@ The following tables show what equivalence classes of hypersurfaces are included
 | 2 |  |  |  |  |  |  |
 | 3 |  |  |  |  |  |  |
 | 4 |  |  |  |  |  |  |
-
-</center>
 
 ---
 - An `X` in any box above means that the script to collect hypersurfaces, of the given dimension and degree over the specified field, has completed. 
