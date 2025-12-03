@@ -9,8 +9,8 @@ The following tables show what equivalence classes of hypersurfaces are included
 **GF(2)**
 | dim/deg| 2 | 3 | 4 | 5 | 6 | 7 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | X | X | X | X | X | !! |
-| 2 | X | X | X |  |  |  |
+| 1 | X | X | X | X | X | K64 |
+| 2 | X | X | X | !! |  |  |
 | 3 |  |  |  |  |  |  |
 | 4 |  |  |  |  |  |  |
 
@@ -37,5 +37,6 @@ The following tables show what equivalence classes of hypersurfaces are included
 ---
 - An `X` in any box above means that the script to collect hypersurfaces, of the given dimension and degree over the specified field, has completed. 
 - Two exclamation points `!!` means that the script is running. 
+- A `K##` indicates that this script was run, and killed, on a machine with `##` G of RAM.
 - An empty box indicates that no script has been ran for this equivalence class.
 
