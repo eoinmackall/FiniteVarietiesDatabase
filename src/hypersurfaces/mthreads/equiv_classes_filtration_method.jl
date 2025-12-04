@@ -79,6 +79,26 @@ function orbit_stabilizer_pruning!(space::Set, G_gens, point, action_dict)
     return collect(stab_gens)
 end
 
+function pack_vector_optimized(v::FqMatrix, q::Int)
+    
+    h = zero(UInt64)
+    n = length(v)
+    if q == 2
+        @inbounds for i in 1:n
+            if !iszero(v[i]) 
+                h |= (one(UInt64) << (i-1))
+            end
+        end
+    else
+        p = one(UInt64)
+        @inbounds for i in 1:n
+            h = h + (UInt64(lift(ZZ, v[i])) * p) 
+            p *= q
+        end
+    end
+    return h
+end
+
 # A version of the above, but optimized to reduce allocations.
 function orbit_stabilizer_pruning_optimized!(buffers, space::Set, G_gens, point, action_dict)
 
@@ -92,8 +112,11 @@ function orbit_stabilizer_pruning_optimized!(buffers, space::Set, G_gens, point,
     end
 
     push!(buffers.orbit_queue, point)
-
-    buffers.transversal[point.v] = buffers.identity
+    
+    q=Int(size(base_ring(point)))
+    init_key = pack_vector_optimized(point.v,q)
+    
+    buffers.transversal[init_key] = buffers.identity
     
     temp_coords = buffers.temp_coords
     M_parent = parent(point)
@@ -101,18 +124,20 @@ function orbit_stabilizer_pruning_optimized!(buffers, space::Set, G_gens, point,
     while !isempty(buffers.orbit_queue)
         vec = pop!(buffers.orbit_queue)
         vec_coords = vec.v
-        trans_vec = buffers.transversal[vec_coords]
+        packed_v = pack_vector_optimized(vec_coords,q)
+        trans_vec = buffers.transversal[packed_v]
 
         for (g_original, M_linear) in buffers.gen_pairs
             mul!(temp_coords, vec_coords, M_linear)
+            packed_key = pack_vector_optimized(temp_coords, q)
 
-            if !haskey(buffers.transversal, temp_coords)
+            if !haskey(buffers.transversal, packed_key)
                 g_next_wrapped = M_parent(deepcopy(temp_coords))
                 delete!(space, g_next_wrapped)
                 push!(buffers.orbit_queue, g_next_wrapped)
-                buffers.transversal[g_next_wrapped.v] = trans_vec * g_original
+                buffers.transversal[packed_key] = trans_vec * g_original
             else
-                trans_next = buffers.transversal[temp_coords]
+                trans_next = buffers.transversal[packed_key]
                 s = trans_vec * g_original * inv(trans_next)
                 push!(buffers.stab_gens, s)
             end
@@ -120,6 +145,38 @@ function orbit_stabilizer_pruning_optimized!(buffers, space::Set, G_gens, point,
     end
     return collect(buffers.stab_gens)
 end
+
+function final_orbit_pruning_optimized!(buffers, space::Set, G_gens, point, action_dict)
+
+    empty!(buffers.orbit_queue)
+    empty!(buffers.gens)
+
+    for g in G_gens
+        push!(buffers.gens, action_dict[g])
+    end
+
+    push!(buffers.orbit_queue, point)
+
+    temp_coords = buffers.temp_coords
+    M_parent = parent(point)
+
+    while !isempty(buffers.orbit_queue)
+        vec = pop!(buffers.orbit_queue)
+        vec_coords = vec.v
+
+        for M_linear in buffers.gens
+            mul!(temp_coords, vec_coords, M_linear)
+            g_next_wrapped = M_parent(deepcopy(temp_coords))
+            
+            if g_next_wrapped in space
+                delete!(space, g_next_wrapped)
+                push!(buffers.orbit_queue, g_next_wrapped)
+            end
+        end
+    end
+    return
+end
+
 
 # Instead of passing matrices, and determining their action on the
 # fly, we isntead determine the linear action induced by these matrices
@@ -144,7 +201,7 @@ function action_morphism(A, quotient, poly, inv_poly, x)
     return ModuleHomomorphism(W, W, action_morphism)
 end
 
-# For fast look-ups.
+# For fast lookups
 function action_dictionary_parallel(G_gens, quotient, poly, inv_poly, x)
 
     results = Vector{Tuple{FqMatrix, FqMatrix}}(undef, length(G_gens))
@@ -207,7 +264,7 @@ function lift_orbit_reps(x, ImV_i, poly, q, inv_poly, f_i, orbits_stabilizers_di
             partial_orbit_stab_dict = Dict{elem_type(W), Vector{FqMatrix}}()
 
             buffers = (
-                transversal = Dict{FqMatrix, FqMatrix}(),
+                transversal = Dict{UInt64, FqMatrix}(),
                 orbit_queue = Vector{elem_type(W)}(),
                 stab_gens = Set{FqMatrix}(),
                 temp_coords = zero_matrix(F, 1, dim_W),
@@ -260,8 +317,6 @@ function final_lift_orbit_reps(x, ImV_i, poly, inv_poly, q, f_i, orbits_and_stab
     end
     unique_matrices_vec = collect(unique_matrices)
     
-    identity_mat = identity_matrix(F, ncols(unique_matrices_vec[end]))
-
     global_action_cache = Dict{FqMatrix, FqMatrix}()
     
     cache_lock = ReentrantLock()
@@ -275,22 +330,18 @@ function final_lift_orbit_reps(x, ImV_i, poly, inv_poly, q, f_i, orbits_and_stab
     end
 
     orbits = collect(keys(orbits_and_stabilizers))
-    chunks = Iterators.partition(orbits, cld(length(orbits), Threads.nthreads()))
+    chunks = Iterators.partition(orbits, cld(length(orbits), 4*Threads.nthreads()))
 
     tasks = map(chunks) do chunk
         Threads.@spawn begin
             partial_orbit = Set{FqMPolyRingElem}()
             
             buffers = (
-                transversal = Dict{FqMatrix, FqMatrix}(),
                 orbit_queue = Vector{elem_type(W)}(),
-                stab_gens = Set{FqMatrix}(),
                 temp_coords = zero_matrix(F, 1, dim_W),
-                identity = identity_mat,
-                gen_pairs = Vector{Tuple{FqMatrix, FqMatrix}}()
+                gens = Vector{FqMatrix}()
             )
-            sizehint!(buffers.gen_pairs, 16)
-            sizehint!(buffers.transversal, 256)
+            sizehint!(buffers.gens, 16)
 
             for vec in chunk
                 lift = preimage(f_i, vec) # preimage in V/V_{i+1}
@@ -299,7 +350,7 @@ function final_lift_orbit_reps(x, ImV_i, poly, inv_poly, q, f_i, orbits_and_stab
                 while !isempty(coset)
                     vec_lift=pop!(coset)
                     push!(partial_orbit, forget_grading(poly(vec_lift)))
-                    orbit_stabilizer_pruning_optimized!(buffers, coset, orbits_and_stabilizers[vec], vec_lift, global_action_cache)
+                    final_orbit_pruning_optimized!(buffers, coset, orbits_and_stabilizers[vec], vec_lift, global_action_cache)
                 end
             end
             return partial_orbit
@@ -430,7 +481,7 @@ function projective_hypersurface_equivalence_classes_from_filtration(F::FqField,
     W_2, _ = quotients[end]
     dim_W2 = dim(W_2)
     buffers = (
-        transversal = Dict{FqMatrix, FqMatrix}(),
+        transversal = Dict{UInt64, FqMatrix}(),
         orbit_queue = Vector{elem_type(W_2)}(),
         stab_gens = Set{FqMatrix}(),
         temp_coords = zero_matrix(F,1,dim_W2),
