@@ -179,7 +179,7 @@ end
 
 
 # Instead of passing matrices, and determining their action on the
-# fly, we isntead determine the linear action induced by these matrices
+# fly, we instead determine the linear action induced by these matrices
 # on our corresponding filtration quotients.
 function action_morphism(A, quotient, poly, inv_poly, x)
 
