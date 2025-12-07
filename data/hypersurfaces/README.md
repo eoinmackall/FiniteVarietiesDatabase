@@ -12,7 +12,7 @@ The following tables show what equivalence classes of hypersurfaces are included
 | 1 | X | X | X | X | X | K64 |
 | 2 | X | X | X | K64 |  |  |
 | 3 | X | X | K64 |  |  |  |
-| 4 | X | !! |  |  |  |  |
+| 4 | X | K64 |  |  |  |  |
 | 5 |   |   |   |   |   |   |
 ---
 
