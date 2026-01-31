@@ -36,7 +36,7 @@ The following tables show what equivalence classes of hypersurfaces are included
 
 ---
 - An `X` in any box above means that the script to collect representatives for equivalence classes of hypersurfaces, of the given dimension and degree over the specified field, has completed. 
-- Two exclamation points `!!` means that their is a data-collection script running in this dimension and degree. 
+- Two exclamation points `!!` means that there is a data-collection script running in this dimension and degree. 
 - A `K##` entry indicates that a data-collection script was run, and killed, on a machine with `##` G of RAM and no script has been run on a machine with more available memory.
 - An empty box indicates that no script has been ran for this equivalence class.
 

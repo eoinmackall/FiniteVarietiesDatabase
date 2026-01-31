@@ -4,7 +4,7 @@
 #
 #####################################################################
 
-# Warning: this could should not be used. At the moment, it will fail
+# Warning: this should not be used. At the moment, it will fail
 # (probably by a seg-fault).
 #
 # This code was a first attempt at changing some of the functions
