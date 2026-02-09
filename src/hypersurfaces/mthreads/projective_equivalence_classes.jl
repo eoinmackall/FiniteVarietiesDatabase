@@ -315,7 +315,7 @@ end
 
 @doc raw"""
 
-    projective_hypersurface_equivalence_classes(F::FqField, n::Int, d::Int; thraded::Bool=false, allocate::Bool=false, verbose::Bool=false)
+    projective_hypersurface_equivalence_classes(F::FqField, n::Int, d::Int; threaded::Bool=false, allocate::Bool=false, verbose::Bool=false)
 
 Produces a set of polynomial representatives for projective equivalence
 classes of hypersurfaces of degree ``d`` in ``\mathbb{P}^n`` over a finite field ``F``

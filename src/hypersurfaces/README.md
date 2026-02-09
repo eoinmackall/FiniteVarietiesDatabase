@@ -50,6 +50,5 @@ Lifting step: #1
 Lifting step: #2
 Lifting step: #3
 Starting stage #3 -- finding representatives in V
-111.210500 seconds (2.73 G allocations: 177.072 GiB, 43.63% gc time, 2 lock conflicts, 1.28% compilation time)
-```
+89.182418 seconds (2.15 G allocations: 144.539 GiB, 30.90% gc time, 0.28% compilation time)```
 
