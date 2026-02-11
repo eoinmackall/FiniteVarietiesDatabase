@@ -8,9 +8,19 @@ using DBInterface
 using FiniteVarietiesDB
 using Oscar
 
-F=GF(2)
-classes=[string(f) for f in projective_hypersurface_equivalence_classes_from_filtration(F, 5, 3, verbose=true)]
-df=DataFrame(
+F = GF(2)
+(f, S) = projective_hypersurface_equivalence_classes_from_filtration(F, 5, 3, verbose=true)
+
+function poly_to_string(f,s)
+    return string(forget_grading(f(s)))
+end
+
+classes = Vector{String}(undef, length(S))
+for (i,s) in enumerate(S)
+    classes[i] = poly_to_string(s)
+end
+
+df = DataFrame(
     field = 2,
     polynomial = classes,
     dimension = 4,

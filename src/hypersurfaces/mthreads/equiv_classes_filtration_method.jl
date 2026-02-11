@@ -393,8 +393,10 @@ end
     projective_hypersurface_equivalence_classes_from_filtration(F::FqField, n::Int, d::Int;
         waring_samples=48, basis_samples=100, verbose=false, interactive=false)
 
-Returns representatives for the set of equivalence classes of nonzero homogeneous polynomials of 
-degree ``d`` in ``n+1`` variables over ``F``, up to linear changes of the variables.
+Returns a pair (f, S) where S is a set of representatives for the set of equivalence classes of nonzero 
+homogeneous polynomials of degree ``d`` in ``n+1`` variables over ``F``, up to linear changes of the variables.
+The elements of S are given as a vector in the vector space ``V`` of all such polynomials, and ``f``
+realizes the isomorphism taking a vector ``v`` to the corresponding polynomial.
 
 If ``\gcd(\#F-1,d)=1``, then this gives a set of equivalence classes for hypersurfaces of degree ``d``
 in ``\mathbb{P}^n``.
@@ -415,13 +417,12 @@ and can affect the duration of the algorithms run-time.
 
 # Example
 ```julia-repl
-julia> projective_hypersurface_equivalence_classes_from_filtration(GF(2), 2, 3)
-Set{FqMPolyRingElem} with 21 elements:
-  x0^3 + x0^2*x1 + x0^2*x2 + x0*x1*x2 + x0*x2^2 + x1^3
-  x0^3 + x0^2*x1 + x0^2*x2 + x0*x1^2 + x0*x2^2 + x1^3
-  x0^3 + x0^2*x1 + x0^2*x2 + x0*x1*x2 + x1^3 + x1^2*x2
-  x0^3 + x0^2*x2 + x0*x2^2 + x1^3 + x1^2*x2 + x1*x2^2
-  ⋮
+julia> (f, S) = projective_hypersurface_equivalence_classes_from_filtration(GF(2), 2, 3);
+
+julia> v = pop!(S);
+
+julia> f(v)
+x0^2*x1 + x0*x1^2 + x0*x1*x2 + x2^3
 ```
 """
 function projective_hypersurface_equivalence_classes_from_filtration(F::FqField, n::Int, d::Int;
