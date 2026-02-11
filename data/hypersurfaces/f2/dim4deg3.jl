@@ -15,8 +15,10 @@ function poly_to_string(f,s)
     return string(forget_grading(f(s)))
 end
 
-classes = Vector{String}(undef, length(S))
-for (i,s) in enumerate(S)
+n_poly = length(S)
+classes = Vector{String}(undef, n_poly)
+for i in 1:n_poly
+    s = pop!(S)
     classes[i] = poly_to_string(s)
 end
 
