@@ -1,5 +1,6 @@
 using Pkg
 Pkg.activate(joinpath(@__DIR__, "../../.."))
+Pkg.instantiate()
 
 using DataFrames
 using DuckDB
