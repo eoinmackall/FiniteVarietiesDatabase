@@ -99,7 +99,7 @@ function orbit_stabilizer!(buffers, G_gens, point, action_dict)
     empty!(buffers.stab_gens)
 
     # We store pairs (vector, matrix), and for a g in G_gens,
-    # we update (g*vector, g*matrix), and add this to orbit_queue, and so on...
+    # we update (vector*g, matrix*g), and add this to orbit_queue, and so on...
     push!(buffers.orbit_queue, (point, buffers.identity))
     
     F = base_ring(point)
