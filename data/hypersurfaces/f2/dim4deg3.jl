@@ -20,7 +20,7 @@ n_poly = length(S)
 classes = Vector{String}(undef, n_poly)
 for i in 1:n_poly
     s = pop!(S)
-    classes[i] = poly_to_string(s)
+    classes[i] = poly_to_string(f,s)
 end
 
 df = DataFrame(

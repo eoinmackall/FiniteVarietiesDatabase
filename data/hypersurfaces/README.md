@@ -9,10 +9,10 @@ The following tables show what equivalence classes of hypersurfaces are included
 **GF(2)**
 | dim/deg| 2 | 3 | 4 | 5 | 6 | 7 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | X | X | X | X | X | K64 |
-| 2 | X | X | X | K64 |  |  |
-| 3 | X | X | K64 |  |  |  |
-| 4 | X | K64 |  |  |  |  |
+| 1 | X | X | X | X | X |  |
+| 2 | X | X | X |  |  |  |
+| 3 | X | X |  |  |  |  |
+| 4 | X | X |  |  |  |  |
 | 5 |   |   |   |   |   |   |
 ---
 
