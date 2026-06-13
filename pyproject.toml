@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "fvdb"
+version = "0.1.0"
+description = "FiniteVarietiesDB TUI"
+authors = ["User <s@f.x>"]
+packages = [{ include = "tui" }]
+
+[tool.poetry.dependencies]
+python = ">=3.8,<4.0"
+duckdb = "*"
+textual = "*"
+pyperclip = "*"
+
+[tool.poetry.scripts]
+fvdb = "tui.fvdb:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

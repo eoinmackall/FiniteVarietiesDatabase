@@ -9,7 +9,6 @@ using DBInterface
 using FiniteVarietiesDB
 using Oscar
 
-
 function main()
 
     F = GF(2)
@@ -33,29 +32,15 @@ function main()
         degree = 3
     )
 
-    hypersurfaces_path = joinpath(@__DIR__, "..", "hypersurfaces.db")
-
-    con = DBInterface.connect(DuckDB.DB, hypersurfaces_path)
+    output_filename = joinpath(@__DIR__, "hypersurfaces_f2_dim1_deg3.parquet")
+    con = DBInterface.connect(DuckDB.DB)
 
     try
         DuckDB.register_data_frame(con, df, "df_temp")
-
-        create_db = """
-        CREATE TABLE IF NOT EXISTS hypersurfaces (
-            field INTEGER,
-            polynomial VARCHAR,
-            dimension INTEGER,
-            degree INTEGER
-        );
-        """
-
-        DBInterface.execute(con, create_db)
-        DBInterface.execute(con, "INSERT INTO hypersurfaces SELECT * FROM df_temp")
-
+        DBInterface.execute(con, "COPY df_temp TO '$output_filename' (FORMAT PARQUET)")
     finally
         DBInterface.close!(con)
-        println("Wrote $(nrow(df)) rows to $hypersurfaces_path")
-
+        println("Wrote $(nrow(df)) rows to $output_filename")
     end
 end
 
