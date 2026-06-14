@@ -10,133 +10,40 @@ from textual.reactive import reactive
 MAX_CELL_LENGTH = 20
 
 class VimInput(Input):
-    def on_focus(self, event: events.Focus) -> None:
-        self.app.last_focused_input = self
-        try:
-            self.scroll_visible(center=True, animate=True)
-        except TypeError:
-            self.scroll_visible(animate=True)
-
+    """Minimal subclass to prevent text entry when not in insert mode."""
+    
     def on_key(self, event: events.Key) -> None:
-        if self.app.current_mode in ("normal", "command"):
-            event.prevent_default()
-            
-            # Only process navigation if we are strictly in normal mode
-            if self.app.current_mode == "normal":
-                if event.key in ("h", "j", "k", "l", "i", "c"):
-                    event.stop() 
-                    
-                    if event.key == "i":
-                        self.app.current_mode = "insert"
-                    elif event.key == "j":
-                        btn_prev = self.app.query_one("#btn_prev")
-                        btn_next = self.app.query_one("#btn_next")
-                        if not btn_prev.disabled:
-                            btn_prev.focus()
-                        elif not btn_next.disabled:
-                            btn_next.focus()
-                        else:
-                            self.app.query_one(VimDataTable).focus()
-                    elif event.key in ("h", "l"):
-                        inputs = list(self.app.query(VimInput))
-                        idx = inputs.index(self)
-                        if event.key == "h":
-                            target_idx = (idx - 1) % len(inputs)
-                            inputs[target_idx].focus()
-                        elif event.key == "l":
-                            target_idx = (idx + 1) % len(inputs)
-                            inputs[target_idx].focus()
-
-class VimButton(Button):
-    def on_key(self, event: events.Key) -> None:
-        if self.app.current_mode == "normal":
-            if event.key in ("h", "j", "k", "l"):
+        if self.app.current_mode != "insert":
+            # Block standard printable characters
+            if event.is_printable:
                 event.prevent_default()
-                event.stop()  # Prevents the key from cascading
-                
-                if event.key == "j":
-                    self.app.query_one(VimDataTable).focus()
-                elif event.key == "k":
-                    last_input = getattr(self.app, "last_focused_input", None)
-                    if last_input:
-                        last_input.focus()
-                    else:
-                        self.app.query(VimInput).first().focus()
-                elif event.key in ("h", "l"):
-                    btn_prev = self.app.query_one("#btn_prev")
-                    btn_next = self.app.query_one("#btn_next")
-                    
-                    if self.id == "btn_prev" and event.key == "l" and not btn_next.disabled:
-                        btn_next.focus()
-                    elif self.id == "btn_next" and event.key == "h" and not btn_prev.disabled:
-                        btn_prev.focus()
 
-class VimDataTable(DataTable):
-    BINDINGS = [
-        ("h", "cursor_left", "Left"),
-        ("j", "cursor_down", "Down"),
-        ("k", "custom_up", "Up"),
-        ("l", "cursor_right", "Right"),
-        ("i", "custom_insert", "Insert Mode"),
-    ]
+    def action_delete_left(self) -> None:
+        """Fired by the backspace key."""
+        if self.app.current_mode == "insert":
+            super().action_delete_left()
 
-    def on_focus(self, event: events.Focus) -> None:
-        self.show_cursor = True
-
-    def on_blur(self, event: events.Blur) -> None:
-        self.show_cursor = False
-
-    def action_custom_up(self) -> None:
-        if self.cursor_coordinate.row == 0:
-            btn_prev = self.app.query_one("#btn_prev")
-            btn_next = self.app.query_one("#btn_next")
-            
-            if not btn_prev.disabled:
-                btn_prev.focus()
-            elif not btn_next.disabled:
-                btn_next.focus()
-            else:
-                last_input = getattr(self.app, "last_focused_input", None)
-                if last_input:
-                    last_input.focus()
-                else:
-                    self.app.query(VimInput).first().focus()
-        else:
-            self.action_cursor_up()
-
-    def action_custom_insert(self) -> None:
-        self.app.current_mode = "insert"
-        last_input = getattr(self.app, "last_focused_input", None)
-        if last_input:
-            last_input.focus()
-        else:
-            self.app.query(VimInput).first().focus()
+    def action_delete_right(self) -> None:
+        """Fired by the delete key."""
+        if self.app.current_mode == "insert":
+            super().action_delete_right()
 
 class ColumnSearchApp(App):
     CSS = """
-        /* Tokyo Night Theme Variables - Must be at root */
+        /* Tokyo Night Theme Variables */
         $background: #1a1b26;
         $surface: #24283b;
         $surface-light: #292e42;
         $panel: #24283b;
-
         $primary: #7aa2f7;
         $primary-light: #7dcfff;
         $primary-dark: #3d59a1;
-
-        $secondary: #bb9af7;
-        $accent: #ff9e64;
-
         $success: #9ece6a;
         $warning: #e0af68;
-        $error: #f7768e;
-
         $text: #c0caf5;
         $text-muted: #565f89;
 
-        Screen {
-          background: $background;
-        }
+        Screen { background: $background; }
 
         #search-container {
           layout: horizontal;
@@ -164,10 +71,7 @@ class ColumnSearchApp(App):
           border: tall $surface-light;
           color: $text;
         }
-
-        Input:focus {
-          border: tall $primary;
-        }
+        Input:focus { border: tall $primary; }
 
         #pagination-container {
           layout: horizontal;
@@ -176,7 +80,7 @@ class ColumnSearchApp(App):
           padding: 1;
         }
 
-        #pagination-container VimButton {
+        #pagination-container Button {
           min-width: 10;
           margin: 0 2;
         }
@@ -199,39 +103,37 @@ class ColumnSearchApp(App):
         #mode-indicator.mode-insert { background: $success; }
         #mode-indicator.mode-command { background: $warning; }
 
-        VimDataTable {
+        DataTable {
           width: 1fr;
           height: 1fr;
           background: $background;
           color: $text;
         }
 
-        VimDataTable > .datatable--header {
+        DataTable > .datatable--header {
           background: $surface;
           color: $primary;
           text-style: bold;
         }
 
-        VimDataTable > .datatable--cursor {
+        /* Hide the cursor when the table is unfocused */
+        DataTable > .datatable--cursor {
+          background: transparent;
+          color: $text;
+        }
+
+        /* Show the cursor only when the table has focus */
+        DataTable:focus > .datatable--cursor {
           background: $primary-dark;
           color: $text;
         }
 
-        /* Custom Status Bar CSS */
         #status-bar {
           dock: bottom;
           height: 1;
           background: $surface;
           color: $text;
           layout: horizontal;
-        }
-
-        #mode-indicator {
-          content-align: center middle;
-          text-style: bold;
-          color: $background;
-          background: $success;
-          padding: 0 2;
         }
 
         #status-hint {
@@ -242,44 +144,9 @@ class ColumnSearchApp(App):
     """ 
     BINDINGS = [
         ("escape", "switch_normal", "Normal Mode"),
-        ("c", "copy_cell", "Copy Original Cell Value")
     ]
 
     current_mode = reactive("normal")
-    command_sequence = ""
-
-    def watch_current_mode(self, old_mode: str, new_mode: str) -> None:
-        try:
-            indicator = self.query_one("#mode-indicator", Label)
-            indicator.update(f" {new_mode.upper()} ")
-            
-            if new_mode == "normal":
-                indicator.styles.background = "#7aa2f7"
-                for inp in self.query(VimInput):
-                    inp.cursor_blink = False
-            elif new_mode == "command":
-                indicator.styles.background = "#e0af68" # Yellow/Warning color
-                for inp in self.query(VimInput):
-                    inp.cursor_blink = False
-            else:
-                indicator.styles.background = "#9ece6a"
-                for inp in self.query(VimInput):
-                    inp.cursor_blink = True
-                    if inp.has_focus:
-                        inp.refresh()
-        except Exception:
-            pass
-
-    def on_key(self, event: events.Key) -> None:
-        # Handle state transitions that bubble up
-        if self.current_mode == "normal":
-            if event.character == ":":
-                self.current_mode = "command"
-        elif self.current_mode == "command":
-            if event.character == "q":
-                self.exit()
-            else:
-                self.current_mode = "normal"
 
     def __init__(self, db_path: str):
         super().__init__()
@@ -288,10 +155,8 @@ class ColumnSearchApp(App):
         
         tables = self.con.execute("SHOW TABLES").fetchall()
         self.table_name = tables[0][0] if tables else "data"
-        
         self.columns = [col[0] for col in self.con.execute(f"DESCRIBE {self.table_name}").fetchall()]
         self.current_data = []
-        
         self.limit = 25
         self.offset = 0
         self.total_count = 0
@@ -305,51 +170,129 @@ class ColumnSearchApp(App):
                         yield VimInput(id=f"input_{col}")
             
             with Horizontal(id="pagination-container"):
-                yield VimButton("Prev", id="btn_prev", disabled=True)
+                yield Button("Prev", id="btn_prev", disabled=True)
                 yield Label("Results: 0", id="result-count")
-                yield VimButton("Next", id="btn_next", disabled=True)
+                yield Button("Next", id="btn_next", disabled=True)
             
-            yield VimDataTable(id="table")
+            yield DataTable(id="table")
             
         with Horizontal(id="status-bar"):
             yield Label(" NORMAL ", id="mode-indicator", classes="mode-normal")
-            yield Label(" ESC: Normal | i: Insert | :q: Quit | hjkl: Navigate", id="status-hint")
+            yield Label(" ESC: Normal | i: Insert | :q: Quit | hjkl: Navigate | c: Copy", id="status-hint")
 
     def on_mount(self) -> None:
-        table = self.query_one(VimDataTable)
+        table = self.query_one(DataTable)
         table.add_columns(*self.columns)
         table.cursor_type = "cell" 
-        table.show_cursor = False  # Start with the cursor hidden
         self.update_table()
-       
+        
         for inp in self.query(VimInput):
             inp.cursor_blink = False
 
-        self.query(VimInput).first().focus()
+        if inputs := self.query(VimInput):
+            inputs.first().focus()
 
     def watch_current_mode(self, old_mode: str, new_mode: str) -> None:
         try:
             indicator = self.query_one("#mode-indicator", Label)
             indicator.update(f" {new_mode.upper()} ")
-            
-            # Dynamically swap the CSS classes
             indicator.remove_class(f"mode-{old_mode}")
             indicator.add_class(f"mode-{new_mode}")
             
-            # Handle cursor blink
-            if new_mode in ("normal", "command"):
-                for inp in self.query(VimInput):
-                    inp.cursor_blink = False
-            else:
-                for inp in self.query(VimInput):
-                    inp.cursor_blink = True
-                    if inp.has_focus:
-                        inp.refresh()
+            for inp in self.query(VimInput):
+                inp.cursor_blink = (new_mode == "insert")
+                if inp.has_focus:
+                    inp.refresh()
         except Exception:
             pass
- 
+
     def action_switch_normal(self) -> None:
         self.current_mode = "normal"
+
+    def on_key(self, event: events.Key) -> None:
+        if self.current_mode == "normal":
+            if event.character == ":":
+                self.current_mode = "command"
+                return
+
+            if event.key in ("h", "j", "k", "l", "i", "c"):
+                if event.key == "i":
+                    self.current_mode = "insert"
+                    if not isinstance(self.focused, VimInput):
+                        if inputs := self.query(VimInput):
+                            inputs.first().focus()
+                elif event.key == "c":
+                    self.action_copy_cell()
+                else:
+                    self.handle_vim_navigation(event.key)
+                    
+        elif self.current_mode == "command":
+            if event.character == "q":
+                self.exit()
+            elif event.key not in ("enter", "colon"):
+                self.current_mode = "normal"
+
+    def handle_vim_navigation(self, key: str) -> None:
+        focused = self.focused
+        
+        if isinstance(focused, DataTable):
+            try:
+                if key == "j":
+                    focused.action_cursor_down()
+                elif key == "k":
+                    if focused.cursor_coordinate.row <= 0:
+                        btn_prev = self.query_one("#btn_prev", Button)
+                        btn_next = self.query_one("#btn_next", Button)
+                        if not btn_prev.disabled:
+                            btn_prev.focus()
+                        elif not btn_next.disabled:
+                            btn_next.focus()
+                        elif inputs := self.query(VimInput):
+                            inputs.first().focus()
+                    else:
+                        focused.action_cursor_up()
+                elif key == "h":
+                    focused.action_cursor_left()
+                elif key == "l":
+                    focused.action_cursor_right()
+            except Exception:
+                pass
+
+        elif isinstance(focused, Button):
+            if key == "j":
+                self.query_one(DataTable).focus()
+            elif key == "k":
+                if inputs := self.query(VimInput):
+                    inputs.first().focus()
+            elif key == "h" and focused.id == "btn_next":
+                btn_prev = self.query_one("#btn_prev", Button)
+                if not btn_prev.disabled:
+                    btn_prev.focus()
+            elif key == "l" and focused.id == "btn_prev":
+                btn_next = self.query_one("#btn_next", Button)
+                if not btn_next.disabled:
+                    btn_next.focus()
+
+        elif isinstance(focused, VimInput):
+            if key == "j":
+                btn_prev = self.query_one("#btn_prev", Button)
+                btn_next = self.query_one("#btn_next", Button)
+                if not btn_prev.disabled:
+                    btn_prev.focus()
+                elif not btn_next.disabled:
+                    btn_next.focus()
+                else:
+                    self.query_one(DataTable).focus()
+            elif key in ("h", "l"):
+                inputs = list(self.query(VimInput))
+                if inputs:
+                    try:
+                        idx = inputs.index(focused)
+                    except ValueError:
+                        idx = 0
+                    
+                    target_idx = (idx - 1) if key == "h" else (idx + 1)
+                    inputs[target_idx % len(inputs)].focus()
 
     @on(Input.Changed)
     def handle_input_change(self) -> None:
@@ -368,14 +311,13 @@ class ColumnSearchApp(App):
             self.update_table()
 
     def action_copy_cell(self) -> None:
-        table = self.query_one(VimDataTable)
+        table = self.query_one(DataTable)
         if not self.current_data:
             return
             
         try:
             row_idx = table.cursor_coordinate.row
             col_idx = table.cursor_coordinate.column
-            
             original_value = self.current_data[row_idx][col_idx]
             
             pyperclip.copy(str(original_value))
@@ -384,7 +326,7 @@ class ColumnSearchApp(App):
             pass
 
     def update_table(self) -> None:
-        table = self.query_one(VimDataTable)
+        table = self.query_one(DataTable)
         table.clear()
 
         conditions = []
@@ -412,8 +354,8 @@ class ColumnSearchApp(App):
                 f"Page {current_page} of {total_pages} | Total: {self.total_count}"
             )
             
-            self.query_one("#btn_prev", VimButton).disabled = self.offset == 0
-            self.query_one("#btn_next", VimButton).disabled = current_page >= total_pages
+            self.query_one("#btn_prev", Button).disabled = self.offset == 0
+            self.query_one("#btn_next", Button).disabled = current_page >= total_pages
 
             display_data = []
             for row in self.current_data:
@@ -428,7 +370,6 @@ class ColumnSearchApp(App):
             self.query_one("#result-count", Label).update("Error querying database")
 
 def main():
-    import sys
     path = sys.argv[1] if len(sys.argv) > 1 else "data/hypersurfaces/hypersurfaces.db"
     app = ColumnSearchApp(path)
     app.run()
