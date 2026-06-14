@@ -1,6 +1,6 @@
 # Databases
 *.parquet
-data/hypersurfaces/hypersurfaces.db
+*.db
 
 # Manifest.toml
 Manifest.toml
